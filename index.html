@@ -2,59 +2,119 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salute Field Sales</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Salute Field App</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f4f6f9; padding-bottom: 80px; }
+        body { background-color: #f4f6f9; padding-bottom: 80px; font-size: 14px; }
         .navbar { background-color: #0d6efd; color: white; }
-        .card { border-radius: 15px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; }
+        .card { border-radius: 10px; border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .form-label { font-weight: bold; font-size: 12px; color: #555; margin-bottom: 2px; }
+        .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; z-index: 1000; }
+        .table-sm td, .table-sm th { padding: 5px; font-size: 12px; vertical-align: middle; }
     </style>
 </head>
 <body>
 
-<nav class="navbar navbar-dark mb-4 shadow-sm">
+<nav class="navbar navbar-dark mb-3 shadow-sm">
     <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">Salute Field App</span>
+        <span class="navbar-brand mb-0 h5">Salute Field Sales</span>
+        <span id="connectionStatus" class="badge bg-warning text-dark">Offline</span>
     </div>
 </nav>
 
 <div class="container">
-    <!-- Entry Form -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <h5 class="card-title text-primary">New Invoice Entry</h5>
-            <div class="row g-2">
-                <div class="col-6"><input type="text" id="invoiceNo" class="form-control" placeholder="Invoice #" required></div>
-                <div class="col-6"><input type="date" id="saleDate" class="form-control" required></div>
-                <div class="col-12"><input type="text" id="clientName" class="form-control" placeholder="Client Name" required></div>
-                <div class="col-6"><input type="text" id="productCode" class="form-control" placeholder="Product Code" required></div>
-                <div class="col-6"><input type="text" id="productName" class="form-control" placeholder="Product Name" required></div>
-                <div class="col-4"><input type="number" id="qty" class="form-control" placeholder="Qty" required></div>
-                <div class="col-4"><input type="number" id="price" class="form-control" placeholder="Price" required></div>
-                <div class="col-4"><input type="number" id="discount" class="form-control" placeholder="Disc %" value="0"></div>
-                <div class="col-12"><button class="btn btn-primary w-100 mt-2" onclick="addLine()">Add Product Line</button></div>
+    <!-- Loading Indicator -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">Syncing with Server...</p>
+    </div>
+
+    <div id="appContent" style="display:none;">
+        <!-- Invoice Header -->
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Invoice #</label>
+                        <input type="text" id="invoiceNo" class="form-control form-control-sm" placeholder="INV-001" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Date</label>
+                        <input type="date" id="saleDate" class="form-control form-control-sm" required>
+                    </div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label class="form-label">Client</label>
+                        <select id="clientSelect" class="form-select form-select-sm" required>
+                            <option value="">-- Select Client --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Entry -->
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white py-1 fw-bold">Add Product</div>
+            <div class="card-body p-2">
+                <div class="row g-2 mb-2">
+                    <div class="col-12">
+                        <label class="form-label">Product</label>
+                        <select id="productSelect" class="form-select form-select-sm" onchange="updatePrice()">
+                            <option value="">-- Select Product --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-4">
+                        <label class="form-label">Qty</label>
+                        <input type="number" id="qty" class="form-control form-control-sm text-center" value="1" min="1">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Price</label>
+                        <input type="number" id="price" class="form-control form-control-sm text-center" value="0">
+                    </div>
+                    <div class="col-4">
+                        <button class="btn btn-sm btn-success w-100 fw-bold" onclick="addLine()">+ Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Invoice Lines -->
+        <div class="card mt-3">
+            <div class="card-header bg-dark text-white py-1 d-flex justify-content-between">
+                <span class="fw-bold">Invoice Lines</span>
+                <span id="totalAmount" class="fw-bold">Total: 0.00</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>Price</th>
+                            <th>Total</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoiceLines">
+                        <tr><td colspan="5" class="text-center text-muted">No products added yet</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-
-    <!-- Current Invoice Lines -->
-    <h6>Current Invoice Lines</h6>
-    <div id="currentLines" class="list-group mb-4 shadow-sm"></div>
-
-    <!-- Saved Invoices (Pending Export) -->
-    <h6>Saved Invoices (Offline)</h6>
-    <div id="savedInvoices" class="list-group mb-4 shadow-sm"></div>
 </div>
 
 <!-- Bottom Action Bar -->
 <div class="bottom-bar">
-    <button class="btn btn-success w-50 fw-bold" onclick="saveInvoice()">Save Invoice</button>
-    <button class="btn btn-warning w-50 fw-bold" onclick="exportToExcel()">Export Excel</button>
+    <button class="btn btn-success w-50 fw-bold" onclick="saveAndExport()">💾 Save & Export Excel</button>
+    <button class="btn btn-danger w-50 fw-bold" onclick="clearCurrent()">🗑️ Clear</button>
 </div>
 
-<!-- SheetJS Library for Excel Generation -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <script src="app.js"></script>
 </body>
