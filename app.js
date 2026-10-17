@@ -1,158 +1,153 @@
-// Global variables
+let allClients = [];
+let allProducts = [];
 let currentLines = [];
 
-// Load saved invoices from phone memory
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('saleDate').valueAsDate = new Date();
-    renderSavedInvoices();
+    
+    // 1. Load data from the server (Live)
+    try {
+        // Fetch from your live MonsterASP system
+        const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
+        if (!response.ok) throw new Error("Network response was not ok");
+        
+        const data = await response.json();
+        
+        // Save to phone storage (for offline use)
+        localStorage.setItem('salute_clients', JSON.stringify(data.clients));
+        localStorage.setItem('salute_products', JSON.stringify(data.products));
+        
+        allClients = data.clients;
+        allProducts = data.products;
+        
+        populateDropdowns();
+    } catch (err) {
+        console.log("Offline mode or server down. Loading from phone storage...");
+        // Fallback to offline data saved previously
+        allClients = JSON.parse(localStorage.getItem('salute_clients') || '[]');
+        allProducts = JSON.parse(localStorage.getItem('salute_products') || '[]');
+        
+        populateDropdowns();
+    }
 });
 
-// Add a product line to the current invoice
+function populateDropdowns() {
+    const clientSelect = document.getElementById('clientSelect');
+    const productSelect = document.getElementById('productSelect');
+    
+    clientSelect.innerHTML = '<option value="">-- Select Client --</option>';
+    allClients.forEach(c => {
+        let opt = document.createElement('option');
+        opt.value = c.name;
+        opt.text = c.name + " (" + c.code + ")";
+        clientSelect.appendChild(opt);
+    });
+
+    productSelect.innerHTML = '<option value="">-- Select Product --</option>';
+    allProducts.forEach(p => {
+        let opt = document.createElement('option');
+        opt.value = p.name;
+        opt.setAttribute('data-code', p.code);
+        opt.setAttribute('data-price', p.price);
+        opt.text = p.name + " (" + p.code + ")";
+        productSelect.appendChild(opt);
+    });
+}
+
+function updatePrice() {
+    const select = document.getElementById('productSelect');
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption.value) {
+        document.getElementById('price').value = selectedOption.getAttribute('data-price');
+    } else {
+        document.getElementById('price').value = 0;
+    }
+}
+
 function addLine() {
     const invoiceNo = document.getElementById('invoiceNo').value;
-    const saleDate = document.getElementById('saleDate').value;
-    const clientName = document.getElementById('clientName').value;
-    const productCode = document.getElementById('productCode').value;
-    const productName = document.getElementById('productName').value;
+    const client = document.getElementById('clientSelect').value;
+    const productSelect = document.getElementById('productSelect');
+    const product = productSelect.value;
+    const productCode = productSelect.options[productSelect.selectedIndex].getAttribute('data-code');
     const qty = parseFloat(document.getElementById('qty').value);
     const price = parseFloat(document.getElementById('price').value);
-    const discount = parseFloat(document.getElementById('discount').value) || 0;
 
-    if (!invoiceNo || !clientName || !productCode || !qty || !price) {
-        alert("Please fill all required fields.");
+    if (!invoiceNo || !client || !product || qty <= 0 || price < 0) {
+        alert("Please fill Invoice #, Client, Product, and valid Qty/Price.");
         return;
     }
 
-    const line = { invoiceNo, saleDate, clientName, productCode, productName, qty, price, discount };
-    currentLines.push(line);
-    renderCurrentLines();
+    currentLines.push({
+        invoiceNo, client, product, productCode, qty, price, lineTotal: (qty * price)
+    });
 
-    // Clear product inputs
-    document.getElementById('productCode').value = '';
-    document.getElementById('productName').value = '';
-    document.getElementById('qty').value = '';
-    document.getElementById('price').value = '';
+    renderLines();
+    document.getElementById('productSelect').value = "";
+    document.getElementById('price').value = 0;
+    document.getElementById('qty').value = 1;
 }
 
-// Render current lines
-function renderCurrentLines() {
-    const div = document.getElementById('currentLines');
-    div.innerHTML = currentLines.map((l, index) => `
-        <div class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-                <strong>${l.productName}</strong> (${l.qty} x ${l.price})<br>
-                <small class="text-muted">${l.clientName} - Inv #${l.invoiceNo}</small>
-            </div>
-            <button class="btn btn-sm btn-danger" onclick="removeLine(${index})">X</button>
-        </div>
-    `).join('');
+function renderLines() {
+    const tbody = document.getElementById('invoiceLines');
+    const totalSpan = document.getElementById('totalAmount');
+    if (currentLines.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No products added yet</td></tr>';
+        totalSpan.innerText = "Total: 0.00";
+        return;
+    }
+
+    let html = ''; let grandTotal = 0;
+    currentLines.forEach((line, index) => {
+        grandTotal += line.lineTotal;
+        html += `<tr>
+            <td>${line.product}</td>
+            <td class="text-center">${line.qty}</td>
+            <td class="text-end">${line.price.toFixed(2)}</td>
+            <td class="text-end fw-bold">${line.lineTotal.toFixed(2)}</td>
+            <td class="text-center"><button class="btn btn-sm text-danger p-0" onclick="removeLine(${index})">✖</button></td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+    totalSpan.innerText = "Total: " + grandTotal.toFixed(2);
 }
 
 function removeLine(index) {
     currentLines.splice(index, 1);
-    renderCurrentLines();
+    renderLines();
 }
 
-// Save invoice to localStorage
-function saveInvoice() {
-    if (currentLines.length === 0) {
-        alert("No lines to save.");
-        return;
-    }
-
-    let saved = JSON.parse(localStorage.getItem('salute_invoices') || '[]');
-    saved = saved.concat(currentLines);
-    localStorage.setItem('salute_invoices', JSON.stringify(saved));
-
-    currentLines = [];
-    renderCurrentLines();
-    renderSavedInvoices();
-    
-    // Clear header inputs
-    document.getElementById('invoiceNo').value = '';
-    document.getElementById('clientName').value = '';
-    
-    alert("Invoice saved offline successfully!");
-}
-
-// Render saved invoices
-function renderSavedInvoices() {
-    let saved = JSON.parse(localStorage.getItem('salute_invoices') || '[]');
-    const div = document.getElementById('savedInvoices');
-    
-    if(saved.length === 0) {
-        div.innerHTML = '<div class="list-group-item text-muted">No saved invoices yet.</div>';
-        return;
-    }
-
-    div.innerHTML = `<div class="list-group-item bg-light">
-        <strong>Total pending lines: ${saved.length}</strong>
-        <button class="btn btn-sm btn-outline-danger float-end" onclick="clearAll()">Clear All</button>
-    </div>`;
-}
-
-function clearAll() {
-    if(confirm("Are you sure you want to delete all saved invoices without exporting?")) {
-        localStorage.removeItem('salute_invoices');
-        renderSavedInvoices();
+function clearCurrent() {
+    if(confirm("Clear all lines in this invoice?")) {
+        currentLines = [];
+        renderLines();
     }
 }
 
-// Generate Excel File
-function exportToExcel() {
-    let saved = JSON.parse(localStorage.getItem('salute_invoices') || '[]');
-    if (saved.length === 0) {
-        alert("No data to export.");
-        return;
-    }
+function saveAndExport() {
+    if (currentLines.length === 0) { alert("No lines to export."); return; }
+    const saleDate = document.getElementById('saleDate').value;
 
-    // Format data to match your SalesImportService exactly
-    const excelData = saved.map(row => ({
-        "qurter": "Q" + Math.ceil((new Date(row.saleDate).getMonth() + 1) / 3),
-        "code": row.productCode,
-        "movement": -row.qty, 
-        "Date": row.saleDate,
-        "Transaction": "Sales",
-        "product": row.productName,
-        "quntity": row.qty,
-        "Price": row.price,
-        "Discount": row.discount + "%",
-        "netPrice": row.price * (1 - (row.discount / 100)),
-        "Arabic_Name": "",
-        "Invoice#": row.invoiceNo,
-        "Client": row.clientName,
-        "discription": "Field Sale",
-        "super visor": "",
-        "sales rep": "Mobile Rep",
-        "cost": 0,
-        "doc#": row.invoiceNo,
-        "PaymentMethod": "Credit",
-        "returns": 0,
-        "Collected": 0,
-        "requested_amount": row.price * row.qty,
-        "totalof return": 0,
-        "returns_price": 0,
-        "Return": 0,
-        "price_code": row.productCode,
-        "Sales": row.price * row.qty,
-        "Governorate": "",
-        "Region": "",
-        "sales_net": (row.price * (1 - (row.discount / 100))) * row.qty,
-        "Cost_net": 0,
-        "Month": new Date(row.saleDate).toLocaleString('default', { month: 'long' }),
-        "AgingLimit": 30,
-        "Initiated Date": row.saleDate,
-        "Quarter": "Q" + Math.ceil((new Date(row.saleDate).getMonth() + 1) / 3)
+    const excelData = currentLines.map(row => ({
+        "qurter": "Q" + Math.ceil((new Date(saleDate).getMonth() + 1) / 3),
+        "code": row.productCode, "movement": -row.qty, "Date": saleDate,
+        "Transaction": "Sales", "product": row.product, "quntity": row.qty,
+        "Price": row.price, "Discount": "0%", "netPrice": row.price,
+        "Arabic_Name": "", "Invoice#": row.invoiceNo, "Client": row.client,
+        "discription": "Field Sale", "super visor": "", "sales rep": "Mobile",
+        "cost": 0, "doc#": row.invoiceNo, "PaymentMethod": "Credit",
+        "returns": 0, "Collected": 0, "requested_amount": row.lineTotal,
+        "totalof return": 0, "returns_price": 0, "Return": 0, "price_code": row.productCode,
+        "Sales": row.lineTotal, "Governorate": "", "Region": "", "sales_net": row.lineTotal,
+        "Cost_net": 0, "Month": new Date(saleDate).toLocaleString('default', { month: 'long' }),
+        "AgingLimit": 30, "Initiated Date": saleDate,
+        "Quarter": "Q" + Math.ceil((new Date(saleDate).getMonth() + 1) / 3)
     }));
 
-    // Generate Excel using SheetJS
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
+    XLSX.writeFile(workbook, `FieldSales_${currentLines[0].invoiceNo}.xlsx`);
     
-    // Download the file
-    const dateStr = new Date().toISOString().slice(0,10);
-    XLSX.writeFile(workbook, `FieldSales_${dateStr}.xlsx`);
-    
-    alert("Excel file generated! Send it to the Admin to import.");
+    alert("Excel exported! Send it to the Admin.");
 }
