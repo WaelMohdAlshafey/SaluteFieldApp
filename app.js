@@ -1,205 +1,228 @@
 let allClients = [];
 let allProducts = [];
-let currentLines = [];
+let allEmployees = [];
+let transactions = []; 
+let currentRep = null;
 
-// Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('saleDate').valueAsDate = new Date();
-    
+    const today = new Date().toISOString().split('T')[0];
+    document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
+
     try {
-        // Try to fetch fresh data from the MonsterASP Server API
         const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
-        
-        if (response.ok) {
-            const data = await response.json();
-            
-            // Save to phone storage for offline use
-            localStorage.setItem('salute_clients', JSON.stringify(data.clients));
-            localStorage.setItem('salute_products', JSON.stringify(data.products));
-            
-            allClients = data.clients;
-            allProducts = data.products;
-            
-            document.getElementById('connectionStatus').className = "badge bg-success";
-            document.getElementById('connectionStatus').innerText = "Online Sync OK";
-        } else {
-            throw new Error("Server returned error");
-        }
+        const data = await response.json();
+        localStorage.setItem('salute_data', JSON.stringify(data));
+        loadData(data);
+        document.getElementById('connectionStatus').className = "badge bg-success";
+        document.getElementById('connectionStatus').innerText = "Online";
     } catch (err) {
-        // If offline, load from phone storage
-        allClients = JSON.parse(localStorage.getItem('salute_clients') || '[]');
-        allProducts = JSON.parse(localStorage.getItem('salute_products') || '[]');
-        
+        const saved = localStorage.getItem('salute_data');
+        if (saved) { loadData(JSON.parse(saved)); }
         document.getElementById('connectionStatus').className = "badge bg-warning text-dark";
-        document.getElementById('connectionStatus').innerText = "Offline (Using Cached Data)";
+        document.getElementById('connectionStatus').innerText = "Offline";
     }
 
-    populateDropdowns();
-    
-    // Hide loading, show app
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('appContent').style.display = 'block';
+    // Check if Rep is already logged in
+    const savedRep = localStorage.getItem('salute_rep');
+    if (savedRep) {
+        currentRep = JSON.parse(savedRep);
+        showApp();
+    }
 });
 
-// Populate Dropdowns
-function populateDropdowns() {
-    const clientSelect = document.getElementById('clientSelect');
-    const productSelect = document.getElementById('productSelect');
-    
-    clientSelect.innerHTML = '<option value="">-- Select Client --</option>';
-    allClients.forEach(c => {
-        let opt = document.createElement('option');
-        opt.value = c.name;
-        opt.text = c.name + " (" + c.code + ")";
-        clientSelect.appendChild(opt);
+function loadData(data) {
+    allClients = data.clients || [];
+    allProducts = data.products || [];
+    allEmployees = data.employees || [];
+
+    // Populate Rep Dropdown
+    const repSelect = document.getElementById('repSelect');
+    repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
+    allEmployees.forEach(e => {
+        repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor}">${e.name}</option>`;
     });
 
-    productSelect.innerHTML = '<option value="">-- Select Product --</option>';
-    allProducts.forEach(p => {
-        let opt = document.createElement('option');
-        opt.value = p.name;
-        opt.setAttribute('data-code', p.code);
-        opt.setAttribute('data-price', p.price);
-        opt.text = p.name + " (" + p.code + ")";
-        productSelect.appendChild(opt);
+    // Populate Clients
+    const clientHtml = '<option value="">-- Select Client --</option>' + allClients.map(c => `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}">${c.name}</option>`).join('');
+    ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
+
+    // Populate Products
+    const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p => `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}">${p.name}</option>`).join('');
+    ['saleProduct', 'retProduct'].forEach(id => document.getElementById(id).innerHTML = prodHtml);
+}
+
+function loginRep() {
+    const select = document.getElementById('repSelect');
+    if (!select.value) return alert("Please select your name.");
+    const opt = select.options[select.selectedIndex];
+    currentRep = { name: select.value, supervisor: opt.getAttribute('data-sup') };
+    localStorage.setItem('salute_rep', JSON.stringify(currentRep));
+    showApp();
+}
+
+function logoutRep() {
+    localStorage.removeItem('salute_rep');
+    location.reload();
+}
+
+function showApp() {
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('appSection').style.display = 'block';
+    document.getElementById('bottomBar').style.display = 'flex';
+    document.getElementById('lblRepName').innerText = currentRep.name;
+    // Load existing offline transactions
+    transactions = JSON.parse(localStorage.getItem('salute_tx') || '[]');
+    renderTable();
+}
+
+function updatePrice(prefix) {
+    const select = document.getElementById(prefix + 'Product');
+    const opt = select.options[select.selectedIndex];
+    if (opt.value) document.getElementById(prefix + 'Price').value = opt.getAttribute('data-price');
+}
+
+// ---------------- ADD SALES ----------------
+function addSale() {
+    const inv = document.getElementById('saleInvoice').value;
+    const clientSel = document.getElementById('saleClient');
+    const prodSel = document.getElementById('saleProduct');
+    if (!inv || !clientSel.value || !prodSel.value) return alert("Fill all fields");
+
+    const cOpt = clientSel.options[clientSel.selectedIndex];
+    const pOpt = prodSel.options[prodSel.selectedIndex];
+    
+    const qty = parseFloat(document.getElementById('saleQty').value);
+    const price = parseFloat(document.getElementById('salePrice').value);
+    const disc = parseFloat(document.getElementById('saleDisc').value) || 0;
+    const netPrice = price * (1 - (disc / 100));
+    
+    transactions.push({
+        type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
+        client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+        product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
+        qty, price, disc, netPrice, total: qty * netPrice,
+        payType: document.getElementById('salePayType').value,
+        paid: parseFloat(document.getElementById('salePaid').value) || 0
     });
+    saveAndRender();
 }
 
-// Auto-fill price when product is selected
-function updatePrice() {
-    const select = document.getElementById('productSelect');
-    const selectedOption = select.options[select.selectedIndex];
-    if (selectedOption.value) {
-        document.getElementById('price').value = selectedOption.getAttribute('data-price');
-    } else {
-        document.getElementById('price').value = 0;
-    }
+// ---------------- ADD RETURNS ----------------
+function addReturn() {
+    const inv = document.getElementById('retInvoice').value;
+    const clientSel = document.getElementById('retClient');
+    const prodSel = document.getElementById('retProduct');
+    if (!inv || !clientSel.value || !prodSel.value) return alert("Fill all fields");
+
+    const cOpt = clientSel.options[clientSel.selectedIndex];
+    const pOpt = prodSel.options[prodSel.selectedIndex];
+    
+    const qty = parseFloat(document.getElementById('retQty').value);
+    const price = parseFloat(document.getElementById('retPrice').value);
+
+    transactions.push({
+        type: 'Return', invoiceNo: inv, date: document.getElementById('retDate').value,
+        client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+        product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
+        qty, price, total: qty * price, paid: 0
+    });
+    saveAndRender();
 }
 
-// Add product to the invoice
-function addLine() {
-    const invoiceNo = document.getElementById('invoiceNo').value;
-    const client = document.getElementById('clientSelect').value;
-    const productSelect = document.getElementById('productSelect');
-    const product = productSelect.value;
-    const productCode = productSelect.options[productSelect.selectedIndex].getAttribute('data-code');
-    const qty = parseFloat(document.getElementById('qty').value);
-    const price = parseFloat(document.getElementById('price').value);
+// ---------------- ADD PAYMENTS ----------------
+function addPayment() {
+    const inv = document.getElementById('payInvoice').value;
+    const clientSel = document.getElementById('payClient');
+    if (!inv || !clientSel.value) return alert("Fill all fields");
 
-    if (!invoiceNo || !client || !product || qty <= 0 || price < 0) {
-        alert("Please fill Invoice #, Client, Product, and valid Qty/Price.");
-        return;
-    }
+    const cOpt = clientSel.options[clientSel.selectedIndex];
+    const amount = parseFloat(document.getElementById('payAmount').value);
 
-    currentLines.push({
-        invoiceNo, client, product, productCode, qty, price, lineTotal: (qty * price)
+    transactions.push({
+        type: 'Payment', invoiceNo: inv, date: document.getElementById('payDate').value,
+        client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+        product: '', productCode: '', qty: 0, price: 0, total: amount, paid: amount
+    });
+    saveAndRender();
+}
+
+function saveAndRender() {
+    localStorage.setItem('salute_tx', JSON.stringify(transactions));
+    renderTable();
+}
+
+function renderTable() {
+    const tbody = document.getElementById('dataLines');
+    let total = 0;
+    tbody.innerHTML = '';
+    transactions.forEach((t, i) => {
+        total += t.total;
+        tbody.innerHTML += `<tr>
+            <td><span class="badge ${t.type==='Sale'?'bg-success':(t.type==='Return'?'bg-warning text-dark':'bg-info')}">${t.type}</span></td>
+            <td>${t.product || t.client}</td><td>${t.qty || '-'}</td><td>${t.total.toFixed(2)}</td>
+            <td><button class="btn btn-sm text-danger p-0" onclick="removeTx(${i})">✖</button></td>
+        </tr>`;
+    });
+    document.getElementById('totalAmount').innerText = "Total: " + total.toFixed(2);
+}
+
+function removeTx(i) { transactions.splice(i, 1); saveAndRender(); }
+function clearAll() { if(confirm("Clear all?")) { transactions = []; saveAndRender(); } }
+
+// ---------------- EXPORT EXCEL ----------------
+function exportExcel() {
+    if (transactions.length === 0) return alert("No data.");
+    
+    const excelData = transactions.map(t => {
+        const isSale = t.type === 'Sale';
+        const isRet = t.type === 'Return';
+        const isPay = t.type === 'Payment';
+        
+        // Default Q1 based on current month
+        const month = new Date(t.date).getMonth();
+        const quarter = "Q" + Math.ceil((month + 1) / 3);
+
+        return {
+            "qurter": quarter,
+            "code": t.productCode,
+            "movement": isSale ? -t.qty : (isRet ? t.qty : 0),
+            "date": t.date,
+            "transaction": t.type,
+            "product": t.product,
+            "quntity": t.qty,
+            "price": t.price,
+            "discount": isSale ? (t.disc + "%") : "0%",
+            "netprice": isSale ? t.netPrice : (isRet ? t.price : 0),
+            "arabicname": t.clientAr,
+            "invoiceno": t.invoiceNo,
+            "client": t.client,
+            "discription": "Mobile App",
+            "super visor": currentRep.supervisor,
+            "sales rep": currentRep.name,
+            "cost": 0, 
+            "docno": t.invoiceNo,
+            "paymentmethod": isSale ? t.payType : (isPay ? "Cash" : ""),
+            "returns": isRet ? t.qty : 0,
+            "collected": isSale ? t.paid : (isPay ? t.total : 0),
+            "requestedamount": t.total,
+            "totalofreturn": isRet ? t.total : 0,
+            "returnsprice": isRet ? t.price : 0,
+            "return": isRet ? t.total : 0,
+            "pricecode": t.productCode,
+            "sales": isSale ? t.total : 0,
+            "governorate": "", 
+            "region": "",
+            "salesnet": isSale ? t.total : 0,
+            "costnet": 0,
+            "month": new Date(t.date).toLocaleString('default', { month: 'long' }),
+            "aginglimit": 30,
+            "initiateddate": t.date,
+            "quarter": quarter
+        };
     });
 
-    renderLines();
-    
-    // Reset product selection
-    document.getElementById('productSelect').value = "";
-    document.getElementById('price').value = 0;
-    document.getElementById('qty').value = 1;
-}
-
-// Render the invoice lines
-function renderLines() {
-    const tbody = document.getElementById('invoiceLines');
-    const totalSpan = document.getElementById('totalAmount');
-    
-    if (currentLines.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No products added yet</td></tr>';
-        totalSpan.innerText = "Total: 0.00";
-        return;
-    }
-
-    let html = ''; 
-    let grandTotal = 0;
-
-    currentLines.forEach((line, index) => {
-        grandTotal += line.lineTotal;
-        html += `
-            <tr>
-                <td>${line.product}</td>
-                <td class="text-center">${line.qty}</td>
-                <td class="text-end">${line.price.toFixed(2)}</td>
-                <td class="text-end fw-bold">${line.lineTotal.toFixed(2)}</td>
-                <td class="text-center"><button class="btn btn-sm text-danger p-0" onclick="removeLine(${index})">✖</button></td>
-            </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-    totalSpan.innerText = "Total: " + grandTotal.toFixed(2);
-}
-
-// Remove a line
-function removeLine(index) {
-    currentLines.splice(index, 1);
-    renderLines();
-}
-
-// Clear current invoice
-function clearCurrent() {
-    if(confirm("Clear all lines in this invoice?")) {
-        currentLines = [];
-        renderLines();
-    }
-}
-
-// Generate Excel matching exact server import format
-function saveAndExport() {
-    if (currentLines.length === 0) {
-        alert("No lines to export.");
-        return;
-    }
-
-    const saleDate = document.getElementById('saleDate').value;
-
-    const excelData = currentLines.map(row => ({
-        "qurter": "Q" + Math.ceil((new Date(saleDate).getMonth() + 1) / 3),
-        "code": row.productCode,
-        "movement": -row.qty, 
-        "Date": saleDate,
-        "Transaction": "Sales",
-        "product": row.product,
-        "quntity": row.qty,
-        "Price": row.price,
-        "Discount": "0%",
-        "netPrice": row.price,
-        "Arabic_Name": "",
-        "Invoice#": row.invoiceNo,
-        "Client": row.client,
-        "discription": "Field Sale",
-        "super visor": "",
-        "sales rep": "Mobile",
-        "cost": 0,
-        "doc#": row.invoiceNo,
-        "PaymentMethod": "Credit",
-        "returns": 0,
-        "Collected": 0,
-        "requested_amount": row.lineTotal,
-        "totalof return": 0,
-        "returns_price": 0,
-        "Return": 0,
-        "price_code": row.productCode,
-        "Sales": row.lineTotal,
-        "Governorate": "",
-        "Region": "",
-        "sales_net": row.lineTotal,
-        "Cost_net": 0,
-        "Month": new Date(saleDate).toLocaleString('default', { month: 'long' }),
-        "AgingLimit": 30,
-        "Initiated Date": saleDate,
-        "Quarter": "Q" + Math.ceil((new Date(saleDate).getMonth() + 1) / 3)
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
-    
-    XLSX.writeFile(workbook, `FieldSales_${currentLines[0].invoiceNo}.xlsx`);
-    
-    alert("Excel exported! Send it to the Admin to import into the main system.");
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    XLSX.writeFile(wb, `FieldData_${currentRep.name}_${new Date().getTime()}.xlsx`);
 }
