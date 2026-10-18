@@ -1,11 +1,13 @@
 let allClients = [];
 let allProducts = [];
 let allEmployees = [];
+let allStores = [];
+let priceHistory = [];
+let discountMethod = "Sequential";
 let savedTx = []; 
 let currentSale = { lines: [], total: 0 };
 let currentRet = { lines: [], total: 0 };
 let currentRep = null;
-let discountMethod = "Sequential";
 
 document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
@@ -14,12 +16,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
         const data = await response.json();
-        localStorage.setItem('salute_data', JSON.stringify(data));
+        localStorage.setItem('salute_data_v2', JSON.stringify(data));
         loadData(data);
         document.getElementById('connectionStatus').className = "badge bg-success";
         document.getElementById('connectionStatus').innerText = "Online";
     } catch (err) {
-        const saved = localStorage.getItem('salute_data');
+        const saved = localStorage.getItem('salute_data_v2');
         if (saved) { loadData(JSON.parse(saved)); }
         document.getElementById('connectionStatus').className = "badge bg-warning text-dark";
         document.getElementById('connectionStatus').innerText = "Offline";
@@ -36,6 +38,8 @@ function loadData(data) {
     allClients = data.clients || [];
     allProducts = data.products || [];
     allEmployees = data.employees || [];
+    allStores = data.stores || [];
+    priceHistory = data.priceHistory || [];
     discountMethod = data.discountMethod || "Sequential";
 
     const repSelect = document.getElementById('repSelect');
@@ -67,22 +71,64 @@ function showApp() {
     
     let filteredClients = allClients;
     if (currentRep.areaId > 0) {
-        filteredClients = allClients.filter(c => c.areaId === currentRep.areaId);
+        filteredClients = allClients.filter(c => c.areaName && c.areaName.trim().toLowerCase() === allEmployees.find(e => e.name === currentRep.name)?.areaName?.toLowerCase());
+        // Fallback: if no area match, show all clients (just in case area names are different)
+        if (filteredClients.length === 0) filteredClients = allClients;
     }
 
     const clientHtml = '<option value="">-- Select Client --</option>' + filteredClients.map(c => 
-        `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-gov="${c.governorate||''}" data-reg="${c.region||''}">${c.name}</option>`
+        `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-area="${c.areaName||''}" data-city="${c.cityName||''}">${c.name}</option>`
     ).join('');
     ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
     
-    savedTx = JSON.parse(localStorage.getItem('salute_saved') || '[]');
+    savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
     renderSavedTable();
+}
+
+// Automatically select the store based on the client's area or city
+function autoSelectStore() {
+    const clientSel = document.getElementById('saleClient');
+    const cOpt = clientSel.options[clientSel.selectedIndex];
+    const areaName = cOpt.getAttribute('data-area');
+    const cityName = cOpt.getAttribute('data-city');
+    const storeSel = document.getElementById('saleStore');
+
+    // Priority 1: Find a SUB store that matches the city
+    let store = allStores.find(s => s.type === "SUB" && s.city === cityName);
+    // Priority 2: Find a PARENT store that matches the area
+    if (!store) store = allStores.find(s => s.type === "PARENT" && s.area === areaName);
+    // Priority 3: Default to MAIN store
+    if (!store) store = allStores.find(s => s.type === "MAIN");
+
+    if (store) {
+        storeSel.innerHTML = `<option value="${store.id}">${store.name}</option>`;
+    } else {
+        storeSel.innerHTML = `<option value="0">-- No store found --</option>`;
+    }
 }
 
 function updatePrice(prefix) {
     const select = document.getElementById(prefix + 'Product');
     const opt = select.options[select.selectedIndex];
-    if (opt.value) document.getElementById(prefix + 'Price').value = opt.getAttribute('data-price');
+    if (!opt.value) return;
+
+    const prodName = opt.value;
+    const saleDateStr = document.getElementById(prefix + 'Date').value;
+    const saleDate = new Date(saleDateStr);
+
+    // Find historical price for this date
+    let validPrice = parseFloat(opt.getAttribute('data-price')) || 0;
+    
+    const histories = priceHistory.filter(h => h.productName === prodName && h.salesPrice > 0);
+    const validHist = histories
+        .filter(h => new Date(h.startDate) <= saleDate)
+        .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
+    if (validHist.length > 0) {
+        validPrice = validHist[0].salesPrice;
+    }
+
+    document.getElementById(prefix + 'Price').value = validPrice;
 }
 
 // ---------------- SALES ----------------
@@ -130,9 +176,7 @@ function renderCurrentSale() {
     const tbody = document.getElementById('currentSaleLines');
     tbody.innerHTML = currentSale.lines.map((l, index) => `
         <tr>
-            <td>${l.product}</td>
-            <td>${l.qty}</td>
-            <td>${l.netPrice.toFixed(2)}</td>
+            <td>${l.product}</td><td>${l.qty}</td><td>${l.netPrice.toFixed(2)}</td>
             <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentSaleLine(${index})">✖</button></td>
         </tr>
     `).join('');
@@ -151,20 +195,24 @@ function clearCurrentSale() {
         renderCurrentSale();
         document.getElementById('saleInvoice').value = '';
         document.getElementById('saleClient').value = '';
+        document.getElementById('salePaid').value = 0;
     }
 }
 
 function saveSaleInvoice() {
     const inv = document.getElementById('saleInvoice').value;
     const clientSel = document.getElementById('saleClient');
-    if (!inv || !clientSel.value || currentSale.lines.length === 0) return alert("Fill header and add lines.");
+    const storeSel = document.getElementById('saleStore');
+    if (!inv || !clientSel.value || !storeSel.value || currentSale.lines.length === 0) return alert("Fill header and add lines.");
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
     
     savedTx.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
+        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
+        storeId: storeSel.value,
+        payType: document.getElementById('salePayType').value, paid: parseFloat(document.getElementById('salePaid').value) || 0,
         total: currentSale.total, lines: [...currentSale.lines]
     });
 
@@ -199,9 +247,7 @@ function renderCurrentRet() {
     const tbody = document.getElementById('currentRetLines');
     tbody.innerHTML = currentRet.lines.map((l, index) => `
         <tr>
-            <td>${l.product}</td>
-            <td>${l.qty}</td>
-            <td>${l.total.toFixed(2)}</td>
+            <td>${l.product}</td><td>${l.qty}</td><td>${l.total.toFixed(2)}</td>
             <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentRetLine(${index})">✖</button></td>
         </tr>
     `).join('');
@@ -233,7 +279,7 @@ function saveReturn() {
     savedTx.push({
         type: 'Return', invoiceNo: inv, date: document.getElementById('retDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
+        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
         total: currentRet.total, lines: [...currentRet.lines]
     });
 
@@ -253,7 +299,7 @@ function savePayment() {
     savedTx.push({
         type: 'Payment', invoiceNo: inv, date: document.getElementById('payDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
+        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
         total: amount, lines: []
     });
 
@@ -296,7 +342,7 @@ async function loadMyReports() {
 
 // ---------------- SHARED ----------------
 function saveAndRender() {
-    localStorage.setItem('salute_saved', JSON.stringify(savedTx));
+    localStorage.setItem('salute_saved_v2', JSON.stringify(savedTx));
     renderSavedTable();
     document.getElementById('savedCount').innerText = savedTx.length + " Saved";
 }
@@ -357,8 +403,8 @@ function exportExcel() {
                     "netprice": isSale ? line.netPrice : line.price, "arabicname": t.clientAr,
                     "invoiceno": t.invoiceNo, "client": t.client, "discription": "Mobile App",
                     "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": line.cost,
-                    "docno": t.invoiceNo, "paymentmethod": "Credit", "returns": isRet ? line.qty : 0,
-                    "collected": 0, "requestedamount": isSale ? (line.price * line.qty) : 0,
+                    "docno": t.invoiceNo, "paymentmethod": isSale ? t.payType : "Credit", "returns": isRet ? line.qty : 0,
+                    "collected": isSale ? t.paid : 0, "requestedamount": isSale ? (line.price * line.qty) : 0,
                     "totalofreturn": isRet ? line.total : 0, "returnsprice": isRet ? line.price : 0,
                     "return": isRet ? line.total : 0, "pricecode": line.productCode,
                     "sales": isSale ? (line.price * line.qty) : 0, "governorate": t.governorate, 
