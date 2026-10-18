@@ -29,6 +29,7 @@
 </nav>
 
 <div class="container">
+    <!-- Login Screen -->
     <div id="loginSection" class="card border-primary mb-3">
         <div class="card-body p-3 text-center">
             <h5 class="text-primary mb-3">Who are you?</h5>
@@ -39,6 +40,7 @@
         </div>
     </div>
 
+    <!-- Main App -->
     <div id="appSection" style="display: none;">
         <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success"><i class="bi bi-person-circle"></i> <span id="lblRepName"></span></span>
@@ -55,7 +57,6 @@
         <div class="tab-content" id="appTabsContent">
             <!-- SALES TAB -->
             <div class="tab-pane fade show active" id="sales" role="tabpanel">
-                <!-- ... [Keep the existing Sales Tab code here exactly as it was] ... -->
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
@@ -81,6 +82,7 @@
                             <table class="table table-sm table-borderless mb-2"><tbody id="currentSaleLines"></tbody></table>
                             <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1"><span>Total:</span><span id="currentSaleTotal">0.00</span></div>
                         </div>
+
                         <div class="d-flex gap-2">
                             <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentSale()">🗑️</button>
                             <button class="btn btn-success w-75 fw-bold py-2 shadow-sm" onclick="saveSaleInvoice()">💾 Save Invoice</button>
@@ -91,8 +93,7 @@
 
             <!-- RETURNS TAB -->
             <div class="tab-pane fade" id="returns" role="tabpanel">
-                <!-- ... [Keep the existing Returns Tab code here exactly as it was] ... -->
-                 <div class="card">
+                <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
                             <div class="col-6"><label class="form-label">Return #</label><input type="text" id="retInvoice" class="form-control form-control-sm"></div>
@@ -125,7 +126,6 @@
 
             <!-- PAYMENTS TAB -->
             <div class="tab-pane fade" id="payments" role="tabpanel">
-                <!-- ... [Keep the existing Payments Tab code here exactly as it was] ... -->
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
@@ -143,22 +143,17 @@
                 </div>
             </div>
 
-            <!-- MY REPORTS TAB (NEW) -->
+            <!-- MY REPORTS TAB -->
             <div class="tab-pane fade" id="reports" role="tabpanel">
                 <div class="card">
                     <div class="card-header bg-primary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
                         <span>My Invoices (Online)</span>
                         <button class="btn btn-sm btn-light py-0" onclick="loadMyReports()">🔄 Refresh</button>
                     </div>
-                    <div class="table-responsive">
+                    <div class="table-responsive" style="max-height: 400px;">
                         <table class="table table-sm table-striped mb-0">
                             <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Invoice</th>
-                                    <th class="text-end">Total</th>
-                                    <th class="text-end">Paid</th>
-                                </tr>
+                                <tr><th>Date</th><th>Invoice</th><th class="text-end">Total</th><th class="text-end">Paid</th></tr>
                             </thead>
                             <tbody id="reportLines">
                                 <tr><td colspan="4" class="text-center text-muted">Click 'Refresh' to load data</td></tr>
@@ -169,6 +164,7 @@
             </div>
         </div>
 
+        <!-- Saved Transactions Today -->
         <div class="card mt-3">
             <div class="card-header bg-dark text-white py-1 fw-bold">Saved Transactions Today</div>
             <div class="table-responsive" style="max-height: 200px;">
