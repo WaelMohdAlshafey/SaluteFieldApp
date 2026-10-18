@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
     document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
 
-    // Fetch data
     try {
         const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
         const data = await response.json();
@@ -23,11 +22,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('connectionStatus').innerText = "Offline";
     }
 
-    // Check if Rep is already locked in
+    // THIS IS WHERE IT REMEMBERS THE USER
     const savedRep = localStorage.getItem('salute_rep');
     if (savedRep) {
         currentRep = JSON.parse(savedRep);
-        showApp();
+        showApp(); // Skips the login screen and goes straight to app
     }
 });
 
@@ -36,20 +35,17 @@ function loadData(data) {
     allProducts = data.products || [];
     allEmployees = data.employees || [];
 
-    // Rep Dropdown
     const repSelect = document.getElementById('repSelect');
     repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
     allEmployees.forEach(e => {
         repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor}">${e.name}</option>`;
     });
 
-    // Clients (with hidden Area/Region data attributes)
     const clientHtml = '<option value="">-- Select Client --</option>' + allClients.map(c => 
         `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-gov="${c.governorate||''}" data-reg="${c.region||''}">${c.name}</option>`
     ).join('');
     ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
 
-    // Products (with hidden Cost data attributes)
     const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p => 
         `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}" data-cost="${p.cost}">${p.name}</option>`
     ).join('');
@@ -61,7 +57,7 @@ function loginRep() {
     if (!select.value) return alert("Please select your name.");
     const opt = select.options[select.selectedIndex];
     currentRep = { name: select.value, supervisor: opt.getAttribute('data-sup') };
-    localStorage.setItem('salute_rep', JSON.stringify(currentRep));
+    localStorage.setItem('salute_rep', JSON.stringify(currentRep)); // SAVES USER PERMANENTLY
     showApp();
 }
 
@@ -81,7 +77,6 @@ function updatePrice(prefix) {
     if (opt.value) document.getElementById(prefix + 'Price').value = opt.getAttribute('data-price');
 }
 
-// ---------------- ADD SALES ----------------
 function addSale() {
     const inv = document.getElementById('saleInvoice').value;
     const clientSel = document.getElementById('saleClient');
@@ -101,13 +96,12 @@ function addSale() {
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
         governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
-        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0, // Hidden Cost
+        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0,
         qty, price, disc, netPrice, total: qty * netPrice, paid: 0
     });
     saveAndRender();
 }
 
-// ---------------- ADD RETURNS ----------------
 function addReturn() {
     const inv = document.getElementById('retInvoice').value;
     const clientSel = document.getElementById('retClient');
@@ -125,13 +119,12 @@ function addReturn() {
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
         governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
-        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0, // Hidden Cost
+        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0,
         qty, price, total: qty * price, paid: 0
     });
     saveAndRender();
 }
 
-// ---------------- ADD PAYMENTS ----------------
 function addPayment() {
     const inv = document.getElementById('payInvoice').value;
     const clientSel = document.getElementById('payClient');
@@ -172,7 +165,6 @@ function renderTable() {
 function removeTx(i) { transactions.splice(i, 1); saveAndRender(); }
 function clearAll() { if(confirm("Clear all?")) { transactions = []; saveAndRender(); } }
 
-// ---------------- EXPORT EXCEL (WITH HIDDEN COST) ----------------
 function exportExcel() {
     if (transactions.length === 0) return alert("No data.");
     
@@ -201,9 +193,9 @@ function exportExcel() {
             "discription": "Mobile App",
             "super visor": currentRep.supervisor,
             "sales rep": currentRep.name,
-            "cost": t.cost, // <-- HIDDEN COST IS HERE
+            "cost": t.cost, // Index 16
             "docno": t.invoiceNo,
-            "paymentmethod": isPay ? "Cash" : "Credit", // ALWAYS CREDIT
+            "paymentmethod": isPay ? "Cash" : "Credit",
             "returns": isRet ? t.qty : 0,
             "collected": isPay ? t.total : 0,
             "requestedamount": isSale ? t.total : 0,
@@ -215,7 +207,7 @@ function exportExcel() {
             "governorate": t.governorate, 
             "region": t.region,
             "salesnet": isSale ? t.total : 0,
-            "costnet": isSale ? (t.cost * t.qty) : (isRet ? (t.cost * t.qty) : 0), // <-- HIDDEN COST NET
+            "costnet": isSale ? (t.cost * t.qty) : (isRet ? (t.cost * t.qty) : 0), // Index 30
             "month": new Date(t.date).toLocaleString('default', { month: 'long' }),
             "aginglimit": 30,
             "initiateddate": t.date,
@@ -225,11 +217,11 @@ function exportExcel() {
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     
-    // --- HIDE AND PROTECT COST COLUMNS ---
-    // "cost" is index 17, "costnet" is index 31 (0-based)
+    // --- FIXED: HIDE AND PROTECT COST COLUMNS ---
+    // 0-based index: cost is 16, costnet is 30
     ws['!cols'] = [];
-    ws['!cols'][17] = { hidden: true }; 
-    ws['!cols'][31] = { hidden: true }; 
+    ws['!cols'][16] = { hidden: true }; // Hides 'cost'
+    ws['!cols'][30] = { hidden: true }; // Hides 'costnet'
     
     // Password protect the sheet so the user CANNOT unhide the columns
     ws['!protect'] = {
