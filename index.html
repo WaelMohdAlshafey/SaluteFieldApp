@@ -14,7 +14,7 @@
         .form-label { font-weight: bold; font-size: 11px; color: #555; margin-bottom: 2px; }
         .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; z-index: 1000; }
         .table-sm td, .table-sm th { padding: 4px; font-size: 11px; vertical-align: middle; }
-        .nav-tabs .nav-link { color: #495057; font-weight: bold; font-size: 12px; }
+        .nav-tabs .nav-link { color: #495057; font-weight: bold; font-size: 12px; padding: 8px 12px; }
         .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
         .current-box { background-color: #e9ecef; border: 2px dashed #6c757d; padding: 10px; border-radius: 10px; margin-bottom: 15px; }
     </style>
@@ -49,11 +49,13 @@
             <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#sales" type="button">Sales</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports" type="button" onclick="loadMyReports()">My Reports</button></li>
         </ul>
 
         <div class="tab-content" id="appTabsContent">
             <!-- SALES TAB -->
             <div class="tab-pane fade show active" id="sales" role="tabpanel">
+                <!-- ... [Keep the existing Sales Tab code here exactly as it was] ... -->
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
@@ -76,15 +78,9 @@
 
                         <div class="current-box">
                             <h6 class="text-dark fw-bold border-bottom pb-1">Current Invoice</h6>
-                            <table class="table table-sm table-borderless mb-2">
-                                <tbody id="currentSaleLines"></tbody>
-                            </table>
-                            <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1">
-                                <span>Total:</span><span id="currentSaleTotal">0.00</span>
-                            </div>
+                            <table class="table table-sm table-borderless mb-2"><tbody id="currentSaleLines"></tbody></table>
+                            <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1"><span>Total:</span><span id="currentSaleTotal">0.00</span></div>
                         </div>
-
-                        <!-- Save & Clear Buttons -->
                         <div class="d-flex gap-2">
                             <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentSale()">🗑️</button>
                             <button class="btn btn-success w-75 fw-bold py-2 shadow-sm" onclick="saveSaleInvoice()">💾 Save Invoice</button>
@@ -95,7 +91,8 @@
 
             <!-- RETURNS TAB -->
             <div class="tab-pane fade" id="returns" role="tabpanel">
-                <div class="card">
+                <!-- ... [Keep the existing Returns Tab code here exactly as it was] ... -->
+                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
                             <div class="col-6"><label class="form-label">Return #</label><input type="text" id="retInvoice" class="form-control form-control-sm"></div>
@@ -128,6 +125,7 @@
 
             <!-- PAYMENTS TAB -->
             <div class="tab-pane fade" id="payments" role="tabpanel">
+                <!-- ... [Keep the existing Payments Tab code here exactly as it was] ... -->
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
@@ -141,6 +139,31 @@
                             <div class="col-12"><label class="form-label">Amount</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
                         </div>
                         <button class="btn btn-info w-100 fw-bold py-2 shadow-sm text-white" onclick="savePayment()">💾 Save Payment</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MY REPORTS TAB (NEW) -->
+            <div class="tab-pane fade" id="reports" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
+                        <span>My Invoices (Online)</span>
+                        <button class="btn btn-sm btn-light py-0" onclick="loadMyReports()">🔄 Refresh</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Invoice</th>
+                                    <th class="text-end">Total</th>
+                                    <th class="text-end">Paid</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportLines">
+                                <tr><td colspan="4" class="text-center text-muted">Click 'Refresh' to load data</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
