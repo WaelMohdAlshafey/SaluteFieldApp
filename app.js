@@ -1,7 +1,7 @@
 let allClients = [];
 let allProducts = [];
 let allEmployees = [];
-let savedTx = []; // Holds all finished invoices for the day
+let savedTx = []; 
 let currentSale = { lines: [], total: 0 };
 let currentRet = { lines: [], total: 0 };
 let currentRep = null;
@@ -118,7 +118,6 @@ function addLineToInvoice() {
     currentSale.total += netPrice;
     renderCurrentSale();
 
-    // Clear entry fields
     document.getElementById('saleProduct').value = '';
     document.getElementById('saleQty').value = 1;
     document.getElementById('salePrice').value = 0;
@@ -129,10 +128,32 @@ function addLineToInvoice() {
 
 function renderCurrentSale() {
     const tbody = document.getElementById('currentSaleLines');
-    tbody.innerHTML = currentSale.lines.map(l => `
-        <tr><td>${l.product}</td><td>${l.qty}</td><td>${l.netPrice.toFixed(2)}</td></tr>
+    tbody.innerHTML = currentSale.lines.map((l, index) => `
+        <tr>
+            <td>${l.product}</td>
+            <td>${l.qty}</td>
+            <td>${l.netPrice.toFixed(2)}</td>
+            <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentSaleLine(${index})">✖</button></td>
+        </tr>
     `).join('');
     document.getElementById('currentSaleTotal').innerText = currentSale.total.toFixed(2);
+}
+
+// --- NEW: REMOVE SINGLE LINE ---
+function removeCurrentSaleLine(index) {
+    const removedLine = currentSale.lines.splice(index, 1)[0];
+    currentSale.total -= removedLine.netPrice; // Adjust total
+    renderCurrentSale(); // Re-render
+}
+
+// --- NEW: CLEAR WHOLE INVOICE ---
+function clearCurrentSale() {
+    if(confirm("Clear this entire current invoice?")) {
+        currentSale = { lines: [], total: 0 };
+        renderCurrentSale();
+        document.getElementById('saleInvoice').value = '';
+        document.getElementById('saleClient').value = '';
+    }
 }
 
 function saveSaleInvoice() {
@@ -149,12 +170,7 @@ function saveSaleInvoice() {
         total: currentSale.total, lines: [...currentSale.lines]
     });
 
-    // Reset
-    currentSale = { lines: [], total: 0 };
-    renderCurrentSale();
-    document.getElementById('saleInvoice').value = '';
-    document.getElementById('saleClient').value = '';
-    
+    clearCurrentSale();
     saveAndRender();
     alert("Invoice Saved!");
 }
@@ -184,10 +200,32 @@ function addReturnLine() {
 
 function renderCurrentRet() {
     const tbody = document.getElementById('currentRetLines');
-    tbody.innerHTML = currentRet.lines.map(l => `
-        <tr><td>${l.product}</td><td>${l.qty}</td><td>${l.total.toFixed(2)}</td></tr>
+    tbody.innerHTML = currentRet.lines.map((l, index) => `
+        <tr>
+            <td>${l.product}</td>
+            <td>${l.qty}</td>
+            <td>${l.total.toFixed(2)}</td>
+            <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentRetLine(${index})">✖</button></td>
+        </tr>
     `).join('');
     document.getElementById('currentRetTotal').innerText = currentRet.total.toFixed(2);
+}
+
+// --- NEW: REMOVE SINGLE RETURN LINE ---
+function removeCurrentRetLine(index) {
+    const removedLine = currentRet.lines.splice(index, 1)[0];
+    currentRet.total -= removedLine.total;
+    renderCurrentRet();
+}
+
+// --- NEW: CLEAR WHOLE RETURN ---
+function clearCurrentRet() {
+    if(confirm("Clear this entire current return?")) {
+        currentRet = { lines: [], total: 0 };
+        renderCurrentRet();
+        document.getElementById('retInvoice').value = '';
+        document.getElementById('retClient').value = '';
+    }
 }
 
 function saveReturn() {
@@ -204,11 +242,7 @@ function saveReturn() {
         total: currentRet.total, lines: [...currentRet.lines]
     });
 
-    currentRet = { lines: [], total: 0 };
-    renderCurrentRet();
-    document.getElementById('retInvoice').value = '';
-    document.getElementById('retClient').value = '';
-    
+    clearCurrentRet();
     saveAndRender();
     alert("Return Saved!");
 }
@@ -246,9 +280,7 @@ function saveAndRender() {
 function renderSavedTable() {
     const tbody = document.getElementById('savedLines');
     tbody.innerHTML = '';
-    let total = 0;
     savedTx.forEach((t, i) => {
-        total += t.total;
         tbody.innerHTML += `<tr>
             <td><span class="badge ${t.type==='Sale'?'bg-success':(t.type==='Return'?'bg-warning text-dark':'bg-info')}">${t.type}</span></td>
             <td>${t.invoiceNo}</td><td>${t.client}</td><td>${t.total.toFixed(2)}</td>
@@ -259,7 +291,7 @@ function renderSavedTable() {
 }
 
 function removeTx(i) { 
-    if(confirm("Delete this transaction?")) {
+    if(confirm("Delete this saved transaction entirely?")) {
         savedTx.splice(i, 1); 
         saveAndRender(); 
     }
@@ -273,17 +305,14 @@ function exportExcel() {
     
     let excelData = [];
 
-    // Flatten all saved invoices, returns, and payments into the 36-column format
     savedTx.forEach(t => {
         const isSale = t.type === 'Sale';
         const isRet = t.type === 'Return';
         const isPay = t.type === 'Payment';
-        
         const month = new Date(t.date).getMonth();
         const quarter = "Q" + Math.ceil((month + 1) / 3);
 
         if (isPay) {
-            // If it's a payment, add a single row for it
             excelData.push({
                 "qurter": quarter, "code": "MISC", "movement": 0, "date": t.date, "transaction": "Payment",
                 "product": "Payment on Account", "quntity": 0, "price": 0, "discount": "0%", "netprice": 0,
@@ -296,61 +325,32 @@ function exportExcel() {
                 "initiateddate": t.date, "quarter": quarter
             });
         } else {
-            // If it's a Sale or Return, loop through its lines
             t.lines.forEach(line => {
                 excelData.push({
-                    "qurter": quarter,
-                    "code": line.productCode,
-                    "movement": isSale ? -line.qty : line.qty,
-                    "date": t.date,
-                    "transaction": t.type,
-                    "product": line.product,
-                    "quntity": line.qty,
-                    "price": line.price,
-                    "discount": isSale ? (line.disc + "%") : "0%",
-                    "netprice": isSale ? line.netPrice : line.price,
-                    "arabicname": t.clientAr,
-                    "invoiceno": t.invoiceNo,
-                    "client": t.client,
-                    "discription": "Mobile App",
-                    "super visor": currentRep.supervisor,
-                    "sales rep": currentRep.name,
-                    "cost": line.cost,
-                    "docno": t.invoiceNo,
-                    "paymentmethod": "Credit",
-                    "returns": isRet ? line.qty : 0,
-                    "collected": 0,
-                    "requestedamount": isSale ? (line.price * line.qty) : 0,
-                    "totalofreturn": isRet ? line.total : 0,
-                    "returnsprice": isRet ? line.price : 0,
-                    "return": isRet ? line.total : 0,
-                    "pricecode": line.productCode,
-                    "sales": isSale ? (line.price * line.qty) : 0,
-                    "governorate": t.governorate, 
-                    "region": t.region,
-                    "salesnet": isSale ? line.netPrice : 0,
-                    "costnet": line.cost * line.qty,
-                    "month": new Date(t.date).toLocaleString('default', { month: 'long' }),
-                    "aginglimit": 30,
-                    "initiateddate": t.date,
-                    "quarter": quarter
+                    "qurter": quarter, "code": line.productCode, "movement": isSale ? -line.qty : line.qty,
+                    "date": t.date, "transaction": t.type, "product": line.product, "quntity": line.qty,
+                    "price": line.price, "discount": isSale ? (line.disc + "%") : "0%",
+                    "netprice": isSale ? line.netPrice : line.price, "arabicname": t.clientAr,
+                    "invoiceno": t.invoiceNo, "client": t.client, "discription": "Mobile App",
+                    "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": line.cost,
+                    "docno": t.invoiceNo, "paymentmethod": "Credit", "returns": isRet ? line.qty : 0,
+                    "collected": 0, "requestedamount": isSale ? (line.price * line.qty) : 0,
+                    "totalofreturn": isRet ? line.total : 0, "returnsprice": isRet ? line.price : 0,
+                    "return": isRet ? line.total : 0, "pricecode": line.productCode,
+                    "sales": isSale ? (line.price * line.qty) : 0, "governorate": t.governorate, 
+                    "region": t.region, "salesnet": isSale ? line.netPrice : 0, "costnet": line.cost * line.qty,
+                    "month": new Date(t.date).toLocaleString('default', { month: 'long' }), "aginglimit": 30,
+                    "initiateddate": t.date, "quarter": quarter
                 });
             });
         }
     });
 
     const ws = XLSX.utils.json_to_sheet(excelData);
-    
     ws['!cols'] = [];
-    ws['!cols'][16] = { hidden: true }; // cost
-    ws['!cols'][30] = { hidden: true }; // costnet
-    
-    ws['!protect'] = {
-        password: "SaluteAdmin2026",
-        formatColumns: false,
-        formatCells: false,
-        selectLockedCells: false
-    };
+    ws['!cols'][16] = { hidden: true };
+    ws['!cols'][30] = { hidden: true };
+    ws['!protect'] = { password: "SaluteAdmin2026", formatColumns: false, formatCells: false, selectLockedCells: false };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data");
