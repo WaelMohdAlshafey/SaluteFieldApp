@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
     document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
 
+    // Fetch data
     try {
         const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
         const data = await response.json();
@@ -22,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('connectionStatus').innerText = "Offline";
     }
 
-    // Check if Rep is already logged in
+    // Check if Rep is already locked in
     const savedRep = localStorage.getItem('salute_rep');
     if (savedRep) {
         currentRep = JSON.parse(savedRep);
@@ -35,19 +36,23 @@ function loadData(data) {
     allProducts = data.products || [];
     allEmployees = data.employees || [];
 
-    // Populate Rep Dropdown
+    // Rep Dropdown
     const repSelect = document.getElementById('repSelect');
     repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
     allEmployees.forEach(e => {
         repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor}">${e.name}</option>`;
     });
 
-    // Populate Clients
-    const clientHtml = '<option value="">-- Select Client --</option>' + allClients.map(c => `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}">${c.name}</option>`).join('');
+    // Clients (with hidden Area/Region data attributes)
+    const clientHtml = '<option value="">-- Select Client --</option>' + allClients.map(c => 
+        `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-gov="${c.governorate||''}" data-reg="${c.region||''}">${c.name}</option>`
+    ).join('');
     ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
 
-    // Populate Products
-    const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p => `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}">${p.name}</option>`).join('');
+    // Products (with hidden Cost data attributes)
+    const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p => 
+        `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}" data-cost="${p.cost}">${p.name}</option>`
+    ).join('');
     ['saleProduct', 'retProduct'].forEach(id => document.getElementById(id).innerHTML = prodHtml);
 }
 
@@ -60,17 +65,12 @@ function loginRep() {
     showApp();
 }
 
-function logoutRep() {
-    localStorage.removeItem('salute_rep');
-    location.reload();
-}
-
 function showApp() {
     document.getElementById('loginSection').style.display = 'none';
     document.getElementById('appSection').style.display = 'block';
     document.getElementById('bottomBar').style.display = 'flex';
     document.getElementById('lblRepName').innerText = currentRep.name;
-    // Load existing offline transactions
+    
     transactions = JSON.parse(localStorage.getItem('salute_tx') || '[]');
     renderTable();
 }
@@ -99,10 +99,10 @@ function addSale() {
     transactions.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
-        qty, price, disc, netPrice, total: qty * netPrice,
-        payType: document.getElementById('salePayType').value,
-        paid: parseFloat(document.getElementById('salePaid').value) || 0
+        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0, // Hidden Cost
+        qty, price, disc, netPrice, total: qty * netPrice, paid: 0
     });
     saveAndRender();
 }
@@ -123,7 +123,9 @@ function addReturn() {
     transactions.push({
         type: 'Return', invoiceNo: inv, date: document.getElementById('retDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
+        cost: parseFloat(pOpt.getAttribute('data-cost')) || 0, // Hidden Cost
         qty, price, total: qty * price, paid: 0
     });
     saveAndRender();
@@ -141,7 +143,8 @@ function addPayment() {
     transactions.push({
         type: 'Payment', invoiceNo: inv, date: document.getElementById('payDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        product: '', productCode: '', qty: 0, price: 0, total: amount, paid: amount
+        governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
+        product: '', productCode: '', cost: 0, qty: 0, price: 0, total: amount, paid: amount
     });
     saveAndRender();
 }
@@ -169,7 +172,7 @@ function renderTable() {
 function removeTx(i) { transactions.splice(i, 1); saveAndRender(); }
 function clearAll() { if(confirm("Clear all?")) { transactions = []; saveAndRender(); } }
 
-// ---------------- EXPORT EXCEL ----------------
+// ---------------- EXPORT EXCEL (WITH HIDDEN COST) ----------------
 function exportExcel() {
     if (transactions.length === 0) return alert("No data.");
     
@@ -178,7 +181,6 @@ function exportExcel() {
         const isRet = t.type === 'Return';
         const isPay = t.type === 'Payment';
         
-        // Default Q1 based on current month
         const month = new Date(t.date).getMonth();
         const quarter = "Q" + Math.ceil((month + 1) / 3);
 
@@ -199,21 +201,21 @@ function exportExcel() {
             "discription": "Mobile App",
             "super visor": currentRep.supervisor,
             "sales rep": currentRep.name,
-            "cost": 0, 
+            "cost": t.cost, // <-- HIDDEN COST IS HERE
             "docno": t.invoiceNo,
-            "paymentmethod": isSale ? t.payType : (isPay ? "Cash" : ""),
+            "paymentmethod": isPay ? "Cash" : "Credit", // ALWAYS CREDIT
             "returns": isRet ? t.qty : 0,
-            "collected": isSale ? t.paid : (isPay ? t.total : 0),
-            "requestedamount": t.total,
+            "collected": isPay ? t.total : 0,
+            "requestedamount": isSale ? t.total : 0,
             "totalofreturn": isRet ? t.total : 0,
             "returnsprice": isRet ? t.price : 0,
             "return": isRet ? t.total : 0,
             "pricecode": t.productCode,
             "sales": isSale ? t.total : 0,
-            "governorate": "", 
-            "region": "",
+            "governorate": t.governorate, 
+            "region": t.region,
             "salesnet": isSale ? t.total : 0,
-            "costnet": 0,
+            "costnet": isSale ? (t.cost * t.qty) : (isRet ? (t.cost * t.qty) : 0), // <-- HIDDEN COST NET
             "month": new Date(t.date).toLocaleString('default', { month: 'long' }),
             "aginglimit": 30,
             "initiateddate": t.date,
@@ -222,6 +224,21 @@ function exportExcel() {
     });
 
     const ws = XLSX.utils.json_to_sheet(excelData);
+    
+    // --- HIDE AND PROTECT COST COLUMNS ---
+    // "cost" is index 17, "costnet" is index 31 (0-based)
+    ws['!cols'] = [];
+    ws['!cols'][17] = { hidden: true }; 
+    ws['!cols'][31] = { hidden: true }; 
+    
+    // Password protect the sheet so the user CANNOT unhide the columns
+    ws['!protect'] = {
+        password: "SaluteAdmin2026",
+        formatColumns: false, // Prevents unhiding
+        formatCells: false,
+        selectLockedCells: false
+    };
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data");
     XLSX.writeFile(wb, `FieldData_${currentRep.name}_${new Date().getTime()}.xlsx`);
