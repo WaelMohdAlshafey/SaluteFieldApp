@@ -28,7 +28,7 @@
 </nav>
 
 <div class="container">
-    <!-- Login/Rep Selection -->
+    <!-- Login Section -->
     <div id="loginSection" class="card border-primary mb-3">
         <div class="card-body p-3 text-center">
             <h5 class="text-primary mb-3">Who are you?</h5>
@@ -42,9 +42,8 @@
     <!-- Main App (Hidden until login) -->
     <div id="appSection" style="display: none;">
         
-        <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="mb-2">
             <span class="fw-bold text-success"><i class="bi bi-person-circle"></i> <span id="lblRepName"></span></span>
-            <button class="btn btn-sm btn-outline-danger" onclick="logoutRep()">Change User</button>
         </div>
 
         <!-- Tabs -->
@@ -70,22 +69,16 @@
                             <div class="col-6"><label class="form-label">Date</label><input type="date" id="saleDate" class="form-control form-control-sm"></div>
                         </div>
                         <div class="row g-2 mb-2">
-                            <div class="col-12"><label class="form-label">Client</label><select id="saleClient" class="form-select form-select-sm" onchange="updateClientInfo('sale')"></select></div>
+                            <div class="col-12"><label class="form-label">Client</label><select id="saleClient" class="form-select form-select-sm"></select></div>
                         </div>
                         <div class="row g-2 mb-2">
                             <div class="col-12"><label class="form-label">Product</label><select id="saleProduct" class="form-select form-select-sm" onchange="updatePrice('sale')"></select></div>
                         </div>
-                        <div class="row g-2 align-items-end mb-2">
+                        <div class="row g-2 align-items-end">
                             <div class="col-3"><label class="form-label">Qty</label><input type="number" id="saleQty" class="form-control form-control-sm text-center" value="1"></div>
                             <div class="col-3"><label class="form-label">Price</label><input type="number" id="salePrice" class="form-control form-control-sm text-center" value="0"></div>
                             <div class="col-2"><label class="form-label">Disc%</label><input type="number" id="saleDisc" class="form-control form-control-sm text-center" value="0"></div>
                             <div class="col-4"><button class="btn btn-sm btn-success w-100 fw-bold" onclick="addSale()">+ Add</button></div>
-                        </div>
-                        <div class="row g-2">
-                            <div class="col-6"><label class="form-label">Payment Type</label>
-                                <select id="salePayType" class="form-select form-select-sm"><option value="Credit">Credit</option><option value="Cash">Cash</option></select>
-                            </div>
-                            <div class="col-6"><label class="form-label">Paid Amount</label><input type="number" id="salePaid" class="form-control form-control-sm" value="0"></div>
                         </div>
                     </div>
                 </div>
