@@ -16,6 +16,7 @@
         .table-sm td, .table-sm th { padding: 4px; font-size: 11px; vertical-align: middle; }
         .nav-tabs .nav-link { color: #495057; font-weight: bold; font-size: 12px; }
         .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+        .current-box { background-color: #e9ecef; border: 2px dashed #6c757d; padding: 10px; border-radius: 10px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -39,24 +40,17 @@
         </div>
     </div>
 
-    <!-- Main App (Hidden until login) -->
+    <!-- Main App -->
     <div id="appSection" style="display: none;">
-        
-        <div class="mb-2">
+        <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success"><i class="bi bi-person-circle"></i> <span id="lblRepName"></span></span>
+            <span class="badge bg-dark" id="savedCount">0 Saved</span>
         </div>
 
-        <!-- Tabs -->
         <ul class="nav nav-tabs mb-2" id="appTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#sales" type="button">Sales</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button>
-            </li>
+            <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#sales" type="button">Sales</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button></li>
         </ul>
 
         <div class="tab-content" id="appTabsContent">
@@ -71,15 +65,30 @@
                         <div class="row g-2 mb-2">
                             <div class="col-12"><label class="form-label">Client</label><select id="saleClient" class="form-select form-select-sm"></select></div>
                         </div>
-                        <div class="row g-2 mb-2">
-                            <div class="col-12"><label class="form-label">Product</label><select id="saleProduct" class="form-select form-select-sm" onchange="updatePrice('sale')"></select></div>
-                        </div>
-                        <div class="row g-2 align-items-end">
+                        
+                        <!-- Add Product to Invoice -->
+                        <div class="row g-1 align-items-end mb-2 bg-light p-2 rounded border">
+                            <div class="col-12"><label class="form-label text-primary">Select Product</label><select id="saleProduct" class="form-select form-select-sm" onchange="updatePrice('sale')"></select></div>
                             <div class="col-3"><label class="form-label">Qty</label><input type="number" id="saleQty" class="form-control form-control-sm text-center" value="1"></div>
                             <div class="col-3"><label class="form-label">Price</label><input type="number" id="salePrice" class="form-control form-control-sm text-center" value="0"></div>
-                            <div class="col-2"><label class="form-label">Disc%</label><input type="number" id="saleDisc" class="form-control form-control-sm text-center" value="0"></div>
-                            <div class="col-4"><button class="btn btn-sm btn-success w-100 fw-bold" onclick="addSale()">+ Add</button></div>
+                            <div class="col-2"><label class="form-label">Reg%</label><input type="number" id="saleReg" class="form-control form-control-sm text-center p-1" value="0"></div>
+                            <div class="col-2"><label class="form-label">Cash%</label><input type="number" id="saleCash" class="form-control form-control-sm text-center p-1" value="0"></div>
+                            <div class="col-2"><label class="form-label">Add%</label><input type="number" id="saleAdd" class="form-control form-control-sm text-center p-1" value="0"></div>
+                            <div class="col-12 mt-2"><button class="btn btn-sm btn-outline-success w-100 fw-bold" onclick="addLineToInvoice()">+ Add Line</button></div>
                         </div>
+
+                        <!-- Current Invoice Table -->
+                        <div class="current-box">
+                            <h6 class="text-dark fw-bold border-bottom pb-1">Current Invoice</h6>
+                            <table class="table table-sm table-borderless mb-2">
+                                <tbody id="currentSaleLines"></tbody>
+                            </table>
+                            <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1">
+                                <span>Total:</span><span id="currentSaleTotal">0.00</span>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-success w-100 fw-bold py-2 shadow-sm" onclick="saveSaleInvoice()">💾 Save This Invoice</button>
                     </div>
                 </div>
             </div>
@@ -95,14 +104,20 @@
                         <div class="row g-2 mb-2">
                             <div class="col-12"><label class="form-label">Client</label><select id="retClient" class="form-select form-select-sm"></select></div>
                         </div>
-                        <div class="row g-2 mb-2">
-                            <div class="col-12"><label class="form-label">Product</label><select id="retProduct" class="form-select form-select-sm" onchange="updatePrice('ret')"></select></div>
-                        </div>
-                        <div class="row g-2 align-items-end">
+                        
+                        <div class="row g-1 align-items-end mb-2 bg-light p-2 rounded border">
+                            <div class="col-12"><label class="form-label text-warning">Select Product</label><select id="retProduct" class="form-select form-select-sm" onchange="updatePrice('ret')"></select></div>
                             <div class="col-4"><label class="form-label">Qty</label><input type="number" id="retQty" class="form-control form-control-sm text-center" value="1"></div>
                             <div class="col-4"><label class="form-label">Price</label><input type="number" id="retPrice" class="form-control form-control-sm text-center" value="0"></div>
-                            <div class="col-4"><button class="btn btn-sm btn-warning w-100 fw-bold" onclick="addReturn()">+ Add</button></div>
+                            <div class="col-4"><button class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="addReturnLine()">+ Add</button></div>
                         </div>
+
+                        <div class="current-box">
+                            <h6 class="text-dark fw-bold border-bottom pb-1">Current Return</h6>
+                            <table class="table table-sm table-borderless mb-2"><tbody id="currentRetLines"></tbody></table>
+                            <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1"><span>Total:</span><span id="currentRetTotal">0.00</span></div>
+                        </div>
+                        <button class="btn btn-warning w-100 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save This Return</button>
                     </div>
                 </div>
             </div>
@@ -118,25 +133,22 @@
                         <div class="row g-2 mb-2">
                             <div class="col-12"><label class="form-label">Client</label><select id="payClient" class="form-select form-select-sm"></select></div>
                         </div>
-                        <div class="row g-2 align-items-end">
-                            <div class="col-6"><label class="form-label">Amount</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
-                            <div class="col-6"><button class="btn btn-sm btn-info w-100 fw-bold text-white" onclick="addPayment()">+ Add</button></div>
+                        <div class="row g-2 align-items-end mb-2">
+                            <div class="col-12"><label class="form-label">Amount</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
                         </div>
+                        <button class="btn btn-info w-100 fw-bold py-2 shadow-sm text-white" onclick="savePayment()">💾 Save Payment</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Data Table -->
-        <div class="card mt-2">
-            <div class="card-header bg-dark text-white py-1 d-flex justify-content-between">
-                <span class="fw-bold">Saved Transactions</span>
-                <span id="totalAmount" class="fw-bold">Total: 0.00</span>
-            </div>
-            <div class="table-responsive" style="max-height: 250px;">
+        <!-- Saved Today Summary -->
+        <div class="card mt-3">
+            <div class="card-header bg-dark text-white py-1 fw-bold">Saved Transactions Today</div>
+            <div class="table-responsive" style="max-height: 200px;">
                 <table class="table table-sm table-striped mb-0">
-                    <thead><tr><th>Type</th><th>Item</th><th>Qty</th><th>Total</th><th></th></tr></thead>
-                    <tbody id="dataLines"></tbody>
+                    <thead><tr><th>Type</th><th>Inv#</th><th>Client</th><th>Total</th><th></th></tr></thead>
+                    <tbody id="savedLines"></tbody>
                 </table>
             </div>
         </div>
