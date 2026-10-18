@@ -29,7 +29,6 @@
 </nav>
 
 <div class="container">
-    <!-- Login Section -->
     <div id="loginSection" class="card border-primary mb-3">
         <div class="card-body p-3 text-center">
             <h5 class="text-primary mb-3">Who are you?</h5>
@@ -40,7 +39,6 @@
         </div>
     </div>
 
-    <!-- Main App -->
     <div id="appSection" style="display: none;">
         <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success"><i class="bi bi-person-circle"></i> <span id="lblRepName"></span></span>
@@ -66,7 +64,6 @@
                             <div class="col-12"><label class="form-label">Client</label><select id="saleClient" class="form-select form-select-sm"></select></div>
                         </div>
                         
-                        <!-- Add Product to Invoice -->
                         <div class="row g-1 align-items-end mb-2 bg-light p-2 rounded border">
                             <div class="col-12"><label class="form-label text-primary">Select Product</label><select id="saleProduct" class="form-select form-select-sm" onchange="updatePrice('sale')"></select></div>
                             <div class="col-3"><label class="form-label">Qty</label><input type="number" id="saleQty" class="form-control form-control-sm text-center" value="1"></div>
@@ -77,7 +74,6 @@
                             <div class="col-12 mt-2"><button class="btn btn-sm btn-outline-success w-100 fw-bold" onclick="addLineToInvoice()">+ Add Line</button></div>
                         </div>
 
-                        <!-- Current Invoice Table -->
                         <div class="current-box">
                             <h6 class="text-dark fw-bold border-bottom pb-1">Current Invoice</h6>
                             <table class="table table-sm table-borderless mb-2">
@@ -88,7 +84,11 @@
                             </div>
                         </div>
 
-                        <button class="btn btn-success w-100 fw-bold py-2 shadow-sm" onclick="saveSaleInvoice()">💾 Save This Invoice</button>
+                        <!-- Save & Clear Buttons -->
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentSale()">🗑️</button>
+                            <button class="btn btn-success w-75 fw-bold py-2 shadow-sm" onclick="saveSaleInvoice()">💾 Save Invoice</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -117,7 +117,11 @@
                             <table class="table table-sm table-borderless mb-2"><tbody id="currentRetLines"></tbody></table>
                             <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1"><span>Total:</span><span id="currentRetTotal">0.00</span></div>
                         </div>
-                        <button class="btn btn-warning w-100 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save This Return</button>
+                        
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentRet()">🗑️</button>
+                            <button class="btn btn-warning w-75 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save Return</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -142,7 +146,6 @@
             </div>
         </div>
 
-        <!-- Saved Today Summary -->
         <div class="card mt-3">
             <div class="card-header bg-dark text-white py-1 fw-bold">Saved Transactions Today</div>
             <div class="table-responsive" style="max-height: 200px;">
