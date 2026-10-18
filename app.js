@@ -3,6 +3,7 @@ let allProducts = [];
 let allEmployees = [];
 let transactions = []; 
 let currentRep = null;
+let discountMethod = "Sequential";
 
 document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
@@ -22,11 +23,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('connectionStatus').innerText = "Offline";
     }
 
-    // THIS IS WHERE IT REMEMBERS THE USER
     const savedRep = localStorage.getItem('salute_rep');
     if (savedRep) {
         currentRep = JSON.parse(savedRep);
-        showApp(); // Skips the login screen and goes straight to app
+        showApp();
     }
 });
 
@@ -34,17 +34,13 @@ function loadData(data) {
     allClients = data.clients || [];
     allProducts = data.products || [];
     allEmployees = data.employees || [];
+    discountMethod = data.discountMethod || "Sequential";
 
     const repSelect = document.getElementById('repSelect');
     repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
     allEmployees.forEach(e => {
-        repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor}">${e.name}</option>`;
+        repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor}" data-area="${e.areaId}">${e.name}</option>`;
     });
-
-    const clientHtml = '<option value="">-- Select Client --</option>' + allClients.map(c => 
-        `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-gov="${c.governorate||''}" data-reg="${c.region||''}">${c.name}</option>`
-    ).join('');
-    ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
 
     const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p => 
         `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}" data-cost="${p.cost}">${p.name}</option>`
@@ -56,8 +52,12 @@ function loginRep() {
     const select = document.getElementById('repSelect');
     if (!select.value) return alert("Please select your name.");
     const opt = select.options[select.selectedIndex];
-    currentRep = { name: select.value, supervisor: opt.getAttribute('data-sup') };
-    localStorage.setItem('salute_rep', JSON.stringify(currentRep)); // SAVES USER PERMANENTLY
+    currentRep = { 
+        name: select.value, 
+        supervisor: opt.getAttribute('data-sup'),
+        areaId: parseInt(opt.getAttribute('data-area')) || 0
+    };
+    localStorage.setItem('salute_rep', JSON.stringify(currentRep));
     showApp();
 }
 
@@ -66,6 +66,16 @@ function showApp() {
     document.getElementById('appSection').style.display = 'block';
     document.getElementById('bottomBar').style.display = 'flex';
     document.getElementById('lblRepName').innerText = currentRep.name;
+    
+    let filteredClients = allClients;
+    if (currentRep.areaId > 0) {
+        filteredClients = allClients.filter(c => c.areaId === currentRep.areaId);
+    }
+
+    const clientHtml = '<option value="">-- Select Client --</option>' + filteredClients.map(c => 
+        `<option value="${c.name}" data-code="${c.code}" data-ar="${c.arabicName||''}" data-gov="${c.governorate||''}" data-reg="${c.region||''}">${c.name}</option>`
+    ).join('');
+    ['saleClient', 'retClient', 'payClient'].forEach(id => document.getElementById(id).innerHTML = clientHtml);
     
     transactions = JSON.parse(localStorage.getItem('salute_tx') || '[]');
     renderTable();
@@ -77,6 +87,7 @@ function updatePrice(prefix) {
     if (opt.value) document.getElementById(prefix + 'Price').value = opt.getAttribute('data-price');
 }
 
+// ---------------- ADD SALES ----------------
 function addSale() {
     const inv = document.getElementById('saleInvoice').value;
     const clientSel = document.getElementById('saleClient');
@@ -88,20 +99,44 @@ function addSale() {
     
     const qty = parseFloat(document.getElementById('saleQty').value);
     const price = parseFloat(document.getElementById('salePrice').value);
-    const disc = parseFloat(document.getElementById('saleDisc').value) || 0;
-    const netPrice = price * (1 - (disc / 100));
+    const reg = parseFloat(document.getElementById('saleReg').value) || 0;
+    const cash = parseFloat(document.getElementById('saleCash').value) || 0;
+    const add = parseFloat(document.getElementById('saleAdd').value) || 0;
     
+    const gross = qty * price;
+    let netPrice = gross;
+
+    if (discountMethod === "Additive") {
+        const totalDisc = reg + cash + add;
+        netPrice = gross * (1 - (totalDisc / 100));
+    } else {
+        netPrice = gross * (1 - reg/100) * (1 - cash/100) * (1 - add/100);
+    }
+    
+    netPrice = Math.round(netPrice * 100) / 100;
+    const totalDiscPct = reg + cash + add;
+
     transactions.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
         governorate: cOpt.getAttribute('data-gov'), region: cOpt.getAttribute('data-reg'),
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
         cost: parseFloat(pOpt.getAttribute('data-cost')) || 0,
-        qty, price, disc, netPrice, total: qty * netPrice, paid: 0
+        qty, price, disc: totalDiscPct, netPrice, total: netPrice, paid: 0
     });
+    
     saveAndRender();
+
+    // CLEAR THE PRODUCT FIELDS SO YOU CAN ADD THE NEXT ONE EASILY
+    document.getElementById('saleProduct').value = '';
+    document.getElementById('saleQty').value = 1;
+    document.getElementById('salePrice').value = 0;
+    document.getElementById('saleReg').value = 0;
+    document.getElementById('saleCash').value = 0;
+    document.getElementById('saleAdd').value = 0;
 }
 
+// ---------------- ADD RETURNS ----------------
 function addReturn() {
     const inv = document.getElementById('retInvoice').value;
     const clientSel = document.getElementById('retClient');
@@ -123,8 +158,14 @@ function addReturn() {
         qty, price, total: qty * price, paid: 0
     });
     saveAndRender();
+    
+    // CLEAR FIELDS
+    document.getElementById('retProduct').value = '';
+    document.getElementById('retQty').value = 1;
+    document.getElementById('retPrice').value = 0;
 }
 
+// ---------------- ADD PAYMENTS ----------------
 function addPayment() {
     const inv = document.getElementById('payInvoice').value;
     const clientSel = document.getElementById('payClient');
@@ -140,6 +181,10 @@ function addPayment() {
         product: '', productCode: '', cost: 0, qty: 0, price: 0, total: amount, paid: amount
     });
     saveAndRender();
+
+    // CLEAR FIELDS
+    document.getElementById('payAmount').value = 0;
+    document.getElementById('payInvoice').value = '';
 }
 
 function saveAndRender() {
@@ -159,7 +204,8 @@ function renderTable() {
             <td><button class="btn btn-sm text-danger p-0" onclick="removeTx(${i})">✖</button></td>
         </tr>`;
     });
-    document.getElementById('totalAmount').innerText = "Total: " + total.toFixed(2);
+    // SHOWS THE EXACT COUNT OF ITEMS THAT WILL BE EXPORTED
+    document.getElementById('totalAmount').innerText = `Items: ${transactions.length} | Total: ${total.toFixed(2)}`;
 }
 
 function removeTx(i) { transactions.splice(i, 1); saveAndRender(); }
@@ -168,6 +214,7 @@ function clearAll() { if(confirm("Clear all?")) { transactions = []; saveAndRend
 function exportExcel() {
     if (transactions.length === 0) return alert("No data.");
     
+    // THIS MAPS ALL TRANSACTIONS (SALES, RETURNS, PAYMENTS) INTO THE EXCEL
     const excelData = transactions.map(t => {
         const isSale = t.type === 'Sale';
         const isRet = t.type === 'Return';
@@ -182,7 +229,7 @@ function exportExcel() {
             "movement": isSale ? -t.qty : (isRet ? t.qty : 0),
             "date": t.date,
             "transaction": t.type,
-            "product": t.product,
+            "product": t.product || "MISC", // If payment, give it a default product name so server doesn't skip
             "quntity": t.qty,
             "price": t.price,
             "discount": isSale ? (t.disc + "%") : "0%",
@@ -193,21 +240,21 @@ function exportExcel() {
             "discription": "Mobile App",
             "super visor": currentRep.supervisor,
             "sales rep": currentRep.name,
-            "cost": t.cost, // Index 16
+            "cost": t.cost,
             "docno": t.invoiceNo,
             "paymentmethod": isPay ? "Cash" : "Credit",
             "returns": isRet ? t.qty : 0,
             "collected": isPay ? t.total : 0,
-            "requestedamount": isSale ? t.total : 0,
+            "requestedamount": isSale ? (t.price * t.qty) : 0,
             "totalofreturn": isRet ? t.total : 0,
             "returnsprice": isRet ? t.price : 0,
             "return": isRet ? t.total : 0,
-            "pricecode": t.productCode,
-            "sales": isSale ? t.total : 0,
+            "pricecode": t.productCode || "MISC",
+            "sales": isSale ? (t.price * t.qty) : 0,
             "governorate": t.governorate, 
             "region": t.region,
-            "salesnet": isSale ? t.total : 0,
-            "costnet": isSale ? (t.cost * t.qty) : (isRet ? (t.cost * t.qty) : 0), // Index 30
+            "salesnet": isSale ? t.netPrice : 0,
+            "costnet": isSale ? (t.cost * t.qty) : (isRet ? (t.cost * t.qty) : 0),
             "month": new Date(t.date).toLocaleString('default', { month: 'long' }),
             "aginglimit": 30,
             "initiateddate": t.date,
@@ -217,21 +264,20 @@ function exportExcel() {
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     
-    // --- FIXED: HIDE AND PROTECT COST COLUMNS ---
-    // 0-based index: cost is 16, costnet is 30
     ws['!cols'] = [];
-    ws['!cols'][16] = { hidden: true }; // Hides 'cost'
-    ws['!cols'][30] = { hidden: true }; // Hides 'costnet'
+    ws['!cols'][16] = { hidden: true };
+    ws['!cols'][30] = { hidden: true };
     
-    // Password protect the sheet so the user CANNOT unhide the columns
     ws['!protect'] = {
         password: "SaluteAdmin2026",
-        formatColumns: false, // Prevents unhiding
+        formatColumns: false,
         formatCells: false,
         selectLockedCells: false
     };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data");
+    
+    // Exports the file with ALL day's items
     XLSX.writeFile(wb, `FieldData_${currentRep.name}_${new Date().getTime()}.xlsx`);
 }
