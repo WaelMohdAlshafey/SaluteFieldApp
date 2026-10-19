@@ -97,7 +97,7 @@ async function syncNow() {
         const data = await resp.json();
 
         localStorage.setItem('salute_data_v2', JSON.stringify(data));
-        loadData(data);
+        loadData(data); // This updates the UI
 
         if (currentRep) {
             await refreshRepScope();
@@ -173,37 +173,42 @@ window.addEventListener('offline', () => {
 // ============================================================
 // DATA & LOGIN
 // ============================================================
-function loadData(data) {
-    allClients    = data.clients    || [];
-    allProducts   = data.products   || [];
-    allEmployees  = data.employees  || [];
-    allStores     = data.stores     || [];
-    priceHistory  = data.priceHistory || [];
+function updateDiscountUI() {
+    const methodStr = discountMethod || "Sequential";
     
-    // Read the method from server (fallback to Sequential)
-    discountMethod = data.discountMethod || "Sequential";
-
-    // 1. UPDATE THE TOP HEADER BADGE
+    // 1. Top header badge
     const topBadge = document.getElementById('topDiscountBadge');
     if (topBadge) {
-        topBadge.innerText = "Method: " + discountMethod;
-        topBadge.className = discountMethod === "Additive" 
+        topBadge.innerText = "Method: " + methodStr;
+        topBadge.className = methodStr === "Additive" 
             ? "badge bg-warning text-dark" 
             : "badge bg-info text-dark";
     }
 
-    // 2. UPDATE THE BIG BANNER IN THE SALES TAB
-    const lblMethod = document.getElementById('bannerDiscountMethod');
-    const divMethod = document.getElementById('divDiscountMethod');
-    if (lblMethod) {
-        if (discountMethod === "Additive") {
-            lblMethod.innerText = "Additive (Sum of percentages)";
-            if (divMethod) divMethod.className = "alert alert-warning py-1 mb-2 text-center text-dark fw-bold";
+    // 2. Big banner in Sales tab
+    const bannerSpan = document.getElementById('bannerDiscountMethod');
+    const bannerDiv = document.getElementById('divDiscountMethod');
+    if (bannerSpan) {
+        if (methodStr === "Additive") {
+            bannerSpan.innerText = "Additive (Sum)";
+            if (bannerDiv) bannerDiv.className = "alert alert-warning py-2 mb-2 text-center text-dark fw-bold";
         } else {
-            lblMethod.innerText = "Sequential (Compound)";
-            if (divMethod) divMethod.className = "alert alert-info py-1 mb-2 text-center fw-bold";
+            bannerSpan.innerText = "Sequential (Compound)";
+            if (bannerDiv) bannerDiv.className = "alert alert-primary py-2 mb-2 text-center fw-bold";
         }
     }
+}
+
+function loadData(data) {
+    if (!data) data = {};
+    allClients    = Array.isArray(data.clients) ? data.clients : [];
+    allProducts   = Array.isArray(data.products) ? data.products : [];
+    allEmployees  = Array.isArray(data.employees) ? data.employees : [];
+    allStores     = Array.isArray(data.stores) ? data.stores : [];
+    priceHistory  = Array.isArray(data.priceHistory) ? data.priceHistory : [];
+    
+    discountMethod = data.discountMethod || "Sequential";
+    updateDiscountUI();
 
     const repSelect = document.getElementById('repSelect');
     if (repSelect) {
@@ -250,6 +255,9 @@ async function showApp() {
     document.getElementById('appSection').style.display = 'block';
     document.getElementById('bottomBar').style.display = 'flex';
     document.getElementById('lblRepName').innerText = currentRep.name;
+    
+    // Ensure discount UI updates upon login
+    updateDiscountUI(); 
 
     savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
     renderSavedTable();
