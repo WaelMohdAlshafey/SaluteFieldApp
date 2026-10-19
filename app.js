@@ -181,6 +181,15 @@ function loadData(data) {
     priceHistory  = data.priceHistory || [];
     discountMethod = data.discountMethod || "Sequential";
 
+    // UPDATE THE VISUAL BADGE
+    const lblMethod = document.getElementById('lblDiscountMethod');
+    if (lblMethod) {
+        lblMethod.innerText = "Method: " + discountMethod;
+        lblMethod.className = discountMethod === "Additive" 
+            ? "badge bg-warning text-dark" 
+            : "badge bg-info text-dark";
+    }
+
     const repSelect = document.getElementById('repSelect');
     if (repSelect) {
         repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
