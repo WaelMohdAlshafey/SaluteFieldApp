@@ -692,6 +692,109 @@ function clearPaymentForm() {
 }
 
 // ============================================================
+// NEW: COMBINED INVOICES (SERVER + LOCAL)
+// ============================================================
+async function loadCombinedInvoices() {
+    const tbody = document.getElementById('combinedInvoiceLines');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
+
+    let combined = [];
+
+    // 1. Fetch Server Invoices (Last 100 for this rep)
+    if (navigator.onLine && currentRep) {
+        try {
+            const response = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`);
+            if (response.ok) {
+                const data = await response.json();
+                (data.sales || []).forEach(s => {
+                    combined.push({
+                        date: s.date, invoiceNo: s.invoiceNo, client: s.client, 
+                        total: s.total, paid: s.paid, balance: s.balance, 
+                        source: 'Server'
+                    });
+                });
+            }
+        } catch (e) { console.warn("Could not load server invoices"); }
+    }
+
+    // 2. Process Local Transactions to adjust balances
+    const localInvoicesMap = {}; // Key: InvoiceNo, Value: Object
+
+    // 2a. Add Local Sales
+    savedTx.filter(t => t.type === 'Sale').forEach(s => {
+        localInvoicesMap[s.invoiceNo] = {
+            date: s.date, invoiceNo: s.invoiceNo, client: s.client,
+            total: s.total, paid: s.paid, returns: 0,
+            source: 'Local'
+        };
+    });
+
+    // 2b. Apply Local Payments
+    savedTx.filter(t => t.type === 'Payment').forEach(p => {
+        const invNo = p.originalInvoiceNo;
+        if (localInvoicesMap[invNo]) {
+            localInvoicesMap[invNo].paid += p.total; // Local sale + local payment
+        } else {
+            // Payment against a server invoice -> find it in combined and update it
+            const serverInv = combined.find(c => c.invoiceNo === invNo);
+            if (serverInv) {
+                serverInv.paid += p.total;
+                serverInv.balance = serverInv.total - serverInv.paid;
+                // If a local payment was made against a server invoice, we can optionally mark the source as "Mixed" or keep it "Server"
+                if (serverInv.balance < 0) serverInv.balance = 0;
+            }
+        }
+    });
+
+    // 2c. Apply Local Returns
+    savedTx.filter(t => t.type === 'Return').forEach(r => {
+        const invNo = r.originalInvoiceNo;
+        if (localInvoicesMap[invNo]) {
+            localInvoicesMap[invNo].returns += r.total;
+        } else {
+            const serverInv = combined.find(c => c.invoiceNo === invNo);
+            if (serverInv) {
+                // Reduce the total of the server invoice by the return amount
+                serverInv.total -= r.total;
+                serverInv.balance = serverInv.total - serverInv.paid;
+            }
+        }
+    });
+
+    // 3. Finalize Local Invoices
+    Object.values(localInvoicesMap).forEach(localInv => {
+        localInv.balance = localInv.total - localInv.paid - localInv.returns;
+        combined.push(localInv);
+    });
+
+    // 4. Sort by Date (newest first) and Render
+    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (combined.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No invoices found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    combined.forEach(c => {
+        const badge = c.source === 'Server' 
+            ? '<span class="badge bg-success" style="font-size:9px">☁️ Server</span>' 
+            : '<span class="badge bg-warning text-dark" style="font-size:9px">📱 Local</span>';
+            
+        const balColor = c.balance > 0 ? 'text-danger fw-bold' : 'text-success';
+
+        tbody.innerHTML += `<tr>
+            <td>${c.date}</td>
+            <td><strong>${c.invoiceNo}</strong></td>
+            <td>${c.client}</td>
+            <td class="text-end">${c.total.toFixed(2)}</td>
+            <td class="text-end ${balColor}">${c.balance.toFixed(2)}</td>
+            <td>${badge}</td>
+        </tr>`;
+    });
+}
+
+// ============================================================
 // REPORTS & HISTORY
 // ============================================================
 async function loadMyReports() {
