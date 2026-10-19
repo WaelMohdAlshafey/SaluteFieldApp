@@ -323,7 +323,7 @@ function addLineToInvoice() {
     else netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
     netPrice = Math.round(netPrice * 100) / 100;
     
-    const discountAmount = gross - netPrice;
+    const discountAmount = Math.round((gross - netPrice) * 100) / 100;
 
     currentSale.lines.push({
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
@@ -353,14 +353,15 @@ function renderCurrentSale() {
     const tbody = document.getElementById('currentSaleLines');
     tbody.innerHTML = currentSale.lines.map((l, index) => `
         <tr>
-            <td>${l.product}</td>
-            <td>${l.qty}</td>
-            <td>${l.price.toFixed(2)}</td>
-            <td>${l.disc}%</td>
+            <td style="max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${l.product}</td>
+            <td class="text-center">${l.qty}</td>
+            <td class="text-end">${l.price.toFixed(2)}</td>
+            <td class="text-center text-danger">${l.disc}%</td>
             <td class="text-end fw-bold">${l.netPrice.toFixed(2)}</td>
-            <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentSaleLine(${index})">✖</button></td>
+            <td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="removeCurrentSaleLine(${index})">✖</button></td>
         </tr>
     `).join('');
+    
     document.getElementById('currentSaleGross').innerText = currentSale.gross.toFixed(2);
     document.getElementById('currentSaleDiscount').innerText = currentSale.discount.toFixed(2);
     document.getElementById('currentSaleTotal').innerText = currentSale.total.toFixed(2);
@@ -369,7 +370,7 @@ function renderCurrentSale() {
 function removeCurrentSaleLine(index) {
     const removed = currentSale.lines.splice(index, 1)[0];
     const gross = removed.qty * removed.price;
-    const discount = gross - removed.netPrice;
+    const discount = Math.round((gross - removed.netPrice) * 100) / 100;
     
     currentSale.gross = Math.round((currentSale.gross - gross) * 100) / 100;
     currentSale.discount = Math.round((currentSale.discount - discount) * 100) / 100;
@@ -482,7 +483,7 @@ function loadInvoiceLines() {
     const inv = allInvoices[parseInt(invIdx)];
     if (!inv) return;
 
-    let html = '<table class="table table-sm mb-0"><thead><tr><th style="width:28px"></th><th>Product</th><th>Sold</th><th>Return</th><th class="text-end">Net Price</th></tr></thead><tbody>';
+    let html = '<table class="table table-sm mb-0"><thead><tr><th style="width:28px"></th><th>Product</th><th class="text-center">Sold</th><th class="text-center">Ret</th><th class="text-end">Net Price</th></tr></thead><tbody>';
     inv.lines.forEach((line, i) => {
         // Use netPrice if available, fallback to price
         const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
@@ -490,8 +491,8 @@ function loadInvoiceLines() {
         html += `<tr>
             <td><input type="checkbox" class="form-check-input ret-line-check" data-idx="${i}" onchange="updateRetLineTotal()"></td>
             <td style="font-size:11px">${line.productName}</td>
-            <td>${line.qty}</td>
-            <td><input type="number" class="form-control form-control-sm ret-line-qty" data-idx="${i}" value="${line.qty}" min="0" max="${line.qty}" style="width:60px" onchange="updateRetLineTotal()"></td>
+            <td class="text-center">${line.qty}</td>
+            <td class="text-center"><input type="number" class="form-control form-control-sm ret-line-qty text-center" data-idx="${i}" value="${line.qty}" min="0" max="${line.qty}" style="width:50px; padding:2px;" onchange="updateRetLineTotal()"></td>
             <td class="text-end fw-bold">${actualNetPrice.toFixed(2)}</td>
         </tr>`;
     });
@@ -542,11 +543,11 @@ function renderCurrentRet() {
     const tbody = document.getElementById('currentRetLines');
     tbody.innerHTML = currentRet.lines.map((l, index) => `
         <tr>
-            <td>${l.productName}</td>
-            <td>${l.qty}</td>
+            <td style="max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${l.productName}</td>
+            <td class="text-center">${l.qty}</td>
             <td class="text-end">${l.price.toFixed(2)}</td>
             <td class="text-end fw-bold text-danger">${l.total.toFixed(2)}</td>
-            <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentRetLine(${index})">✖</button></td>
+            <td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="removeCurrentRetLine(${index})">✖</button></td>
         </tr>
     `).join('');
     document.getElementById('currentRetTotal').innerText = currentRet.total.toFixed(2);
