@@ -179,15 +179,30 @@ function loadData(data) {
     allEmployees  = data.employees  || [];
     allStores     = data.stores     || [];
     priceHistory  = data.priceHistory || [];
+    
+    // Read the method from server (fallback to Sequential)
     discountMethod = data.discountMethod || "Sequential";
 
-    // UPDATE THE VISUAL BADGE
-    const lblMethod = document.getElementById('lblDiscountMethod');
-    if (lblMethod) {
-        lblMethod.innerText = "Method: " + discountMethod;
-        lblMethod.className = discountMethod === "Additive" 
+    // 1. UPDATE THE TOP HEADER BADGE
+    const topBadge = document.getElementById('topDiscountBadge');
+    if (topBadge) {
+        topBadge.innerText = "Method: " + discountMethod;
+        topBadge.className = discountMethod === "Additive" 
             ? "badge bg-warning text-dark" 
             : "badge bg-info text-dark";
+    }
+
+    // 2. UPDATE THE BIG BANNER IN THE SALES TAB
+    const lblMethod = document.getElementById('bannerDiscountMethod');
+    const divMethod = document.getElementById('divDiscountMethod');
+    if (lblMethod) {
+        if (discountMethod === "Additive") {
+            lblMethod.innerText = "Additive (Sum of percentages)";
+            if (divMethod) divMethod.className = "alert alert-warning py-1 mb-2 text-center text-dark fw-bold";
+        } else {
+            lblMethod.innerText = "Sequential (Compound)";
+            if (divMethod) divMethod.className = "alert alert-info py-1 mb-2 text-center fw-bold";
+        }
     }
 
     const repSelect = document.getElementById('repSelect');
