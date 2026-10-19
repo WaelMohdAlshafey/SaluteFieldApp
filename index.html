@@ -17,6 +17,8 @@
         .nav-tabs .nav-link { color: #495057; font-weight: bold; font-size: 12px; padding: 8px 12px; }
         .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
         .current-box { background-color: #e9ecef; border: 2px dashed #6c757d; padding: 10px; border-radius: 10px; margin-bottom: 15px; }
+        .ret-lines-wrap { max-height: 220px; overflow-y: auto; }
+        #retInvoiceLines table { margin-bottom: 0; }
     </style>
 </head>
 <body>
@@ -29,6 +31,7 @@
 </nav>
 
 <div class="container">
+    <!-- LOGIN -->
     <div id="loginSection" class="card border-primary mb-3">
         <div class="card-body p-3 text-center">
             <h5 class="text-primary mb-3">Who are you?</h5>
@@ -39,10 +42,17 @@
         </div>
     </div>
 
+    <!-- APP -->
     <div id="appSection" style="display: none;">
         <div class="mb-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold text-success"><i class="bi bi-person-circle"></i> <span id="lblRepName"></span></span>
-            <span class="badge bg-dark" id="savedCount">0 Saved</span>
+            <span class="fw-bold text-success">👤 <span id="lblRepName"></span></span>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-check-label small mb-0">
+                    <input type="checkbox" id="showAllClients" class="form-check-input" onchange="refreshClientDropdowns()">
+                    Show all clients
+                </label>
+                <span class="badge bg-dark" id="savedCount">0 Saved</span>
+            </div>
         </div>
 
         <ul class="nav nav-tabs mb-2" id="appTabs" role="tablist">
@@ -53,7 +63,7 @@
         </ul>
 
         <div class="tab-content" id="appTabsContent">
-            <!-- SALES TAB -->
+            <!-- ================ SALES ================ -->
             <div class="tab-pane fade show active" id="sales" role="tabpanel">
                 <div class="card">
                     <div class="card-body p-2">
@@ -67,7 +77,7 @@
                         <div class="row g-2 mb-2">
                             <div class="col-12"><label class="form-label">Store</label><select id="saleStore" class="form-select form-select-sm"></select></div>
                         </div>
-                        
+
                         <div class="row g-1 align-items-end mb-2 bg-light p-2 rounded border">
                             <div class="col-12"><label class="form-label text-primary">Select Product</label><select id="saleProduct" class="form-select form-select-sm" onchange="updatePrice('sale')"></select></div>
                             <div class="col-3"><label class="form-label">Qty</label><input type="number" id="saleQty" class="form-control form-control-sm text-center" value="1"></div>
@@ -97,40 +107,55 @@
                 </div>
             </div>
 
-            <!-- RETURNS TAB -->
+            <!-- ================ RETURNS ================ -->
             <div class="tab-pane fade" id="returns" role="tabpanel">
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
-                            <div class="col-6"><label class="form-label">Return #</label><input type="text" id="retInvoice" class="form-control form-control-sm"></div>
-                            <div class="col-6"><label class="form-label">Date</label><input type="date" id="retDate" class="form-control form-control-sm"></div>
+                            <div class="col-12"><label class="form-label">Client</label>
+                                <select id="retClient" class="form-select form-select-sm" onchange="loadClientInvoices()"></select>
+                            </div>
                         </div>
+
                         <div class="row g-2 mb-2">
-                            <div class="col-12"><label class="form-label">Client</label><select id="retClient" class="form-select form-select-sm"></select></div>
+                            <div class="col-12"><label class="form-label">Original Invoice</label>
+                                <select id="retInvoiceSelect" class="form-select form-select-sm" onchange="loadInvoiceLines()">
+                                    <option value="">-- Select Client first --</option>
+                                </select>
+                            </div>
                         </div>
-                        
-                        <div class="row g-1 align-items-end mb-2 bg-light p-2 rounded border">
-                            <div class="col-12"><label class="form-label text-warning">Select Product</label><select id="retProduct" class="form-select form-select-sm" onchange="updatePrice('ret')"></select></div>
-                            <div class="col-4"><label class="form-label">Qty</label><input type="number" id="retQty" class="form-control form-control-sm text-center" value="1"></div>
-                            <div class="col-4"><label class="form-label">Price</label><input type="number" id="retPrice" class="form-control form-control-sm text-center" value="0"></div>
-                            <div class="col-4"><button class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="addReturnLine()">+ Add</button></div>
+
+                        <div class="bg-light p-2 rounded border mb-2">
+                            <div class="fw-bold text-primary small mb-1">Invoice Lines — tick what you are returning</div>
+                            <div id="retInvoiceLines" class="ret-lines-wrap">
+                                <p class="text-muted small mb-0">Select a client and invoice to load lines.</p>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6"><label class="form-label">Return #</label>
+                                <input type="text" id="retReturnNo" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-6"><label class="form-label">Date</label>
+                                <input type="date" id="retDate" class="form-control form-control-sm">
+                            </div>
                         </div>
 
                         <div class="current-box">
-                            <h6 class="text-dark fw-bold border-bottom pb-1">Current Return</h6>
+                            <h6 class="text-dark fw-bold border-bottom pb-1">Items to Return</h6>
                             <table class="table table-sm table-borderless mb-2"><tbody id="currentRetLines"></tbody></table>
                             <div class="d-flex justify-content-between fw-bold text-dark border-top pt-1"><span>Total:</span><span id="currentRetTotal">0.00</span></div>
                         </div>
-                        
+
                         <div class="d-flex gap-2">
-                            <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentRet()">🗑️</button>
+                            <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentRet(false)">🗑️</button>
                             <button class="btn btn-warning w-75 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save Return</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- PAYMENTS TAB -->
+            <!-- ================ PAYMENTS ================ -->
             <div class="tab-pane fade" id="payments" role="tabpanel">
                 <div class="card">
                     <div class="card-body p-2">
@@ -149,7 +174,7 @@
                 </div>
             </div>
 
-            <!-- MY REPORTS TAB -->
+            <!-- ================ MY REPORTS ================ -->
             <div class="tab-pane fade" id="reports" role="tabpanel">
                 <div class="card">
                     <div class="card-header bg-primary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
@@ -168,7 +193,6 @@
             </div>
         </div>
 
-        <!-- Saved Today Summary -->
         <div class="card mt-3">
             <div class="card-header bg-dark text-white py-1 fw-bold">Saved Transactions Today</div>
             <div class="table-responsive" style="max-height: 200px;">
