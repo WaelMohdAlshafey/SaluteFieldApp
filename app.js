@@ -355,11 +355,9 @@ function addLineToInvoice() {
     const gross = qty * price;
     let netPrice = gross;
     
-    // MATCHING SERVER C# LOGIC EXACTLY
     if (discountMethod === "Additive") {
         netPrice = gross * (1 - ((reg + cash + add) / 100));
     } else {
-        // Sequential (Compound) - Default
         netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
     }
     
@@ -378,7 +376,6 @@ function addLineToInvoice() {
     
     renderCurrentSale();
     
-    // Clear all fields completely
     document.getElementById('saleProduct').value = '';
     document.getElementById('saleQty').value = 1;
     document.getElementById('salePrice').value = 0;
@@ -386,7 +383,6 @@ function addLineToInvoice() {
     document.getElementById('saleCash').value = 0;
     document.getElementById('saleAdd').value = 0;
     
-    // Focus back to product for quick entry
     document.getElementById('saleProduct').focus();
 }
 
@@ -478,7 +474,6 @@ async function loadClientInvoices() {
 
     allInvoices = [...serverInvoices];
 
-    // Local Saved Sales
     const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
     localSales.forEach(ls => {
         if (!allInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
@@ -493,7 +488,6 @@ async function loadClientInvoices() {
         }
     });
 
-    // Historical Cached Invoices
     const histSales = historicalInvoices.filter(h => h.clientName === clientName);
     histSales.forEach(hs => {
         if (!allInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
@@ -526,7 +520,6 @@ function loadInvoiceLines() {
 
     let html = '<table class="table table-sm mb-0"><thead><tr><th style="width:28px"></th><th>Product</th><th class="text-center">Sold</th><th class="text-center">Ret</th><th class="text-end">Net Price</th></tr></thead><tbody>';
     inv.lines.forEach((line, i) => {
-        // Use netPrice if available, fallback to price
         const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
         
         html += `<tr>
@@ -566,7 +559,6 @@ function updateRetLineTotal() {
         if (qty <= 0) return;
         if (qty > line.qty) { qty = line.qty; qtyInput.value = line.qty; }
 
-        // Calculate using NET price
         const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
         const lineTotal = Math.round(qty * actualNetPrice * 100) / 100;
         
@@ -663,7 +655,6 @@ async function loadPaymentInvoices() {
 
     let allClientInvoices = [...serverInvoices];
 
-    // Local Saved Sales
     const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
     localSales.forEach(ls => {
         if (!allClientInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
@@ -673,7 +664,6 @@ async function loadPaymentInvoices() {
         }
     });
 
-    // Historical Cached Invoices
     const histSales = historicalInvoices.filter(h => h.clientName === clientName);
     histSales.forEach(hs => {
         if (!allClientInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
@@ -704,23 +694,19 @@ function calculateRemainingPayment() {
 
     const invTotal = parseFloat(invSelect.options[invSelect.selectedIndex].getAttribute('data-total')) || 0;
     
-    // Find local returns for this invoice
     let totalReturns = 0;
     savedTx.filter(t => t.type === 'Return' && t.originalInvoiceNo === invNo).forEach(r => {
         totalReturns += r.total;
     });
 
-    // Find local payments for this invoice
     let totalPaid = 0;
     savedTx.filter(t => t.type === 'Payment' && t.originalInvoiceNo === invNo).forEach(p => {
         totalPaid += p.total;
     });
 
-    // Calculate
     let remaining = invTotal - totalReturns - totalPaid;
     if (remaining < 0) remaining = 0;
 
-    // Auto-fill the amount field
     amountInput.value = remaining.toFixed(2);
 }
 
@@ -782,7 +768,6 @@ async function loadStatementClient() {
         } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
 
-    // Local Data
     const localInvoices = savedTx.filter(t => t.type === 'Sale' && t.client === clientName).map(s => ({
         id: 'local_' + s.invoiceNo,
         invoiceNumber: s.invoiceNo,
@@ -810,14 +795,12 @@ async function loadStatementClient() {
         isLocal: true
     }));
 
-    // Merge all data
     currentStatementData = {
         invoices: [...(serverData.invoices || []), ...localInvoices],
         payments: [...(serverData.payments || []), ...localPayments],
         returns: [...(serverData.returns || []), ...localReturns]
     };
 
-    // Sort invoices by date descending
     currentStatementData.invoices.sort((a,b) => new Date(b.date) - new Date(a.date));
 
     if (currentStatementData.invoices.length === 0) {
@@ -844,7 +827,6 @@ function renderInvoiceStatement() {
 
     document.getElementById('stmtDetails').style.display = 'block';
 
-    // Header
     document.getElementById('stmtInvNo').innerText = inv.invoiceNumber;
     document.getElementById('stmtInvDate').innerText = inv.date;
     
@@ -853,7 +835,6 @@ function renderInvoiceStatement() {
         : '<span class="badge bg-success">☁️ Server</span>';
     document.getElementById('stmtInvSource').innerHTML = sourceBadge;
 
-    // Lines
     const linesTbody = document.getElementById('stmtInvLines');
     linesTbody.innerHTML = '';
     inv.lines.forEach(l => {
@@ -866,7 +847,6 @@ function renderInvoiceStatement() {
         </tr>`;
     });
 
-    // Payments
     const invPayments = currentStatementData.payments.filter(p => 
         p.reference && p.reference.includes(inv.invoiceNumber)
     );
@@ -899,7 +879,6 @@ function renderInvoiceStatement() {
         payTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Payments</td></tr>';
     }
 
-    // Returns
     const invReturns = currentStatementData.returns.filter(r => 
         r.originalInvoiceNo === inv.invoiceNumber
     );
@@ -919,7 +898,6 @@ function renderInvoiceStatement() {
         retTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Returns</td></tr>';
     }
 
-    // Grand Totals
     const balance = inv.total - totalPaid - totalReturns;
     
     document.getElementById('stmtInvTotal').innerText = inv.total.toFixed(2);
@@ -934,7 +912,7 @@ function renderInvoiceStatement() {
 }
 
 // ============================================================
-// REPORTS (SERVER ONLY - GROUPED BY CLIENT)
+// BALANCES REPORT (SERVER ONLY - GROUPED BY CLIENT)
 // ============================================================
 async function loadMyReports() {
     const tbody = document.getElementById('reportLines');
@@ -950,7 +928,6 @@ async function loadMyReports() {
     }
 
     try {
-        // Build the URL with date filters
         let url = `https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`;
         if (fromDate) url += `&from=${fromDate}`;
         if (toDate) url += `&to=${toDate}`;
@@ -985,7 +962,6 @@ async function loadMyReports() {
             grouped[clientName].paid += (s.paid || 0);
             grouped[clientName].balance += (s.balance || 0);
 
-            // Totals for the top cards
             totalSales += (s.total || 0);
             totalBalance += (s.balance || 0);
         });
@@ -998,17 +974,19 @@ async function loadMyReports() {
         // Render Table
         tbody.innerHTML = '';
         
-        // Sort clients by Highest Sales
-        const sortedClients = Object.keys(grouped).sort((a, b) => grouped[b].total - grouped[a].total);
+        // SORT BY HIGHEST BALANCE FIRST (Who owes the most)
+        const sortedClients = Object.keys(grouped).sort((a, b) => grouped[b].balance - grouped[a].balance);
 
         sortedClients.forEach(client => {
             const g = grouped[client];
+            const balColor = g.balance > 0.01 ? 'text-danger fw-bold' : 'text-success';
+            
             tbody.innerHTML += `<tr>
                 <td><strong>☁️ ${client}</strong></td>
                 <td class="text-center">${g.invoices}</td>
-                <td class="text-end fw-bold text-dark">${g.total.toFixed(2)}</td>
+                <td class="text-end text-muted">${g.total.toFixed(2)}</td>
                 <td class="text-end text-success">${g.paid.toFixed(2)}</td>
-                <td class="text-end text-danger">${g.balance.toFixed(2)}</td>
+                <td class="text-end ${balColor}">${g.balance.toFixed(2)}</td>
             </tr>`;
         });
 
