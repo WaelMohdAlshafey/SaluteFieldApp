@@ -1,3 +1,6 @@
+// ============================================================
+// GLOBAL STATE
+// ============================================================
 let allClients = [];
 let allProducts = [];
 let allEmployees = [];
@@ -8,46 +11,182 @@ let savedTx = [];
 let currentSale = { lines: [], total: 0 };
 let currentRet = { lines: [], total: 0 };
 let currentRep = null;
-let allInvoices = []; // Used for Returns
+let allInvoices = []; 
+let historicalInvoices = []; 
 
+let repScopeClients = new Set();
+let lastSyncTime = 0;
+let syncIntervalMs = 15 * 60 * 1000;
+let syncIntervalTimer = null;
+
+const VALID_SYNC_INTERVALS = [0, 900000, 1800000, 2700000, 3600000, 86400000];
+const DEFAULT_SYNC_INTERVAL_MS = 900000;
+
+// ============================================================
+// STARTUP
+// ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
     document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
 
-    try {
-        const response = await fetch('https://saluteonline.runasp.net/api/MobileData');
-        const data = await response.json();
-        localStorage.setItem('salute_data_v2', JSON.stringify(data));
-        loadData(data);
-        document.getElementById('connectionStatus').className = "badge bg-success";
-        document.getElementById('connectionStatus').innerText = "Online";
-    } catch (err) {
-        const saved = localStorage.getItem('salute_data_v2');
-        if (saved) { loadData(JSON.parse(saved)); }
-        document.getElementById('connectionStatus').className = "badge bg-warning text-dark";
-        document.getElementById('connectionStatus').innerText = "Offline";
-    }
+    const saved = localStorage.getItem('salute_data_v2');
+    if (saved) { try { loadData(JSON.parse(saved)); } catch (e) {} }
+    
+    savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
+    historicalInvoices = JSON.parse(localStorage.getItem('salute_historical_invoices') || '[]');
+    
+    lastSyncTime = parseInt(localStorage.getItem('salute_last_sync') || '0');
+    updateSyncBadge();
+    loadSyncInterval();
+
+    await syncNow();
 
     const savedRep = localStorage.getItem('salute_rep');
     if (savedRep) {
-        currentRep = JSON.parse(savedRep);
-        showApp();
+        try {
+            currentRep = JSON.parse(savedRep);
+            await showApp();
+        } catch (e) { localStorage.removeItem('salute_rep'); }
     }
 });
 
+// ============================================================
+// SYNC LOGIC
+// ============================================================
+function loadSyncInterval() {
+    const stored = parseInt(localStorage.getItem('salute_sync_interval') || '');
+    syncIntervalMs = VALID_SYNC_INTERVALS.includes(stored) ? stored : DEFAULT_SYNC_INTERVAL_MS;
+    const sel = document.getElementById('syncIntervalSelect');
+    if (sel) sel.value = String(syncIntervalMs);
+    scheduleSync();
+}
+
+function scheduleSync() {
+    if (syncIntervalTimer) clearInterval(syncIntervalTimer);
+    if (syncIntervalMs <= 0) return;
+    syncIntervalTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && navigator.onLine) syncNow();
+    }, syncIntervalMs);
+}
+
+function changeSyncInterval(value) {
+    const parsed = parseInt(value);
+    if (!VALID_SYNC_INTERVALS.includes(parsed)) return;
+    syncIntervalMs = parsed;
+    localStorage.setItem('salute_sync_interval', String(syncIntervalMs));
+    scheduleSync();
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !navigator.onLine || syncIntervalMs <= 0) return;
+    if (!lastSyncTime || Date.now() - lastSyncTime >= syncIntervalMs) syncNow();
+});
+
+async function syncNow() {
+    const statusEl = document.getElementById('syncStatus');
+    const connEl   = document.getElementById('connectionStatus');
+    if (!statusEl || !connEl) return;
+
+    statusEl.innerHTML = '⏳ Syncing...';
+    statusEl.className = 'badge bg-info';
+
+    try {
+        const resp = await fetch('https://saluteonline.runasp.net/api/MobileData', { cache: 'no-store' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+
+        localStorage.setItem('salute_data_v2', JSON.stringify(data));
+        loadData(data);
+
+        if (currentRep) {
+            await refreshRepScope();
+            refreshClientDropdowns();
+        }
+
+        lastSyncTime = Date.now();
+        localStorage.setItem('salute_last_sync', lastSyncTime.toString());
+
+        statusEl.innerHTML = '✅ Synced ' + relativeTime(lastSyncTime);
+        statusEl.className = 'badge bg-success';
+        connEl.className   = 'badge bg-success';
+        connEl.innerText   = 'Online';
+    } catch (err) {
+        statusEl.innerHTML = '⚠️ Sync failed';
+        statusEl.className = 'badge bg-warning text-dark';
+        connEl.className   = 'badge bg-warning text-dark';
+        connEl.innerText   = 'Offline (cached)';
+    }
+}
+
+async function refreshRepScope() {
+    if (!currentRep) return;
+    try {
+        const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`, { cache: 'no-store' });
+        if (resp.ok) {
+            const data = await resp.json();
+            repScopeClients.clear();
+            (data.sales || []).forEach(s => { if (s.client) repScopeClients.add(s.client); });
+        }
+    } catch (e) {}
+    savedTx.forEach(t => { if (t.client) repScopeClients.add(t.client); });
+}
+
+function relativeTime(ts) {
+    if (!ts) return '--';
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return diff + 's ago';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+}
+
+function updateSyncBadge() {
+    const el = document.getElementById('syncStatus');
+    if (!el) return;
+    if (lastSyncTime) {
+        el.innerHTML = '🔄 Synced ' + relativeTime(lastSyncTime);
+        el.className = 'badge bg-success';
+    } else {
+        el.innerHTML = '🔄 Never synced';
+        el.className = 'badge bg-secondary';
+    }
+}
+
+setInterval(() => {
+    if (lastSyncTime && !document.hidden) {
+        const el = document.getElementById('syncStatus');
+        if (el && el.classList.contains('bg-success')) el.innerHTML = '🔄 Synced ' + relativeTime(lastSyncTime);
+    }
+}, 30000);
+
+window.addEventListener('online', () => {
+    const connEl = document.getElementById('connectionStatus');
+    if (connEl) { connEl.className = 'badge bg-success'; connEl.innerText = 'Online'; }
+    syncNow();
+});
+window.addEventListener('offline', () => {
+    const connEl = document.getElementById('connectionStatus');
+    if (connEl) { connEl.className = 'badge bg-warning text-dark'; connEl.innerText = 'Offline (cached)'; }
+});
+
+// ============================================================
+// DATA & LOGIN
+// ============================================================
 function loadData(data) {
-    allClients = data.clients || [];
-    allProducts = data.products || [];
-    allEmployees = data.employees || [];
-    allStores = data.stores || [];
-    priceHistory = data.priceHistory || [];
+    allClients    = data.clients    || [];
+    allProducts   = data.products   || [];
+    allEmployees  = data.employees  || [];
+    allStores     = data.stores     || [];
+    priceHistory  = data.priceHistory || [];
     discountMethod = data.discountMethod || "Sequential";
 
     const repSelect = document.getElementById('repSelect');
-    repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
-    allEmployees.forEach(e => {
-        repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor || ''}" data-area="${e.areaId || 0}">${e.name}</option>`;
-    });
+    if (repSelect) {
+        repSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
+        allEmployees.forEach(e => {
+            repSelect.innerHTML += `<option value="${e.name}" data-sup="${e.supervisor || ''}" data-area="${e.areaId || 0}">${e.name}</option>`;
+        });
+    }
 
     const prodHtml = '<option value="">-- Select Product --</option>' + allProducts.map(p =>
         `<option value="${p.name}" data-code="${p.code}" data-price="${p.price}" data-cost="${p.cost}">${p.name}</option>`
@@ -71,43 +210,56 @@ function loginRep() {
     showApp();
 }
 
-// ------------------------------------------------------------------
-// SHOW APP & ENFORCE AUTHORITIES (Only show clients in user's area)
-// ------------------------------------------------------------------
-function showApp() {
+function logoutRep() {
+    if (!confirm("Logout? Your saved transactions will remain on this device.")) return;
+    localStorage.removeItem('salute_rep');
+    currentRep = null;
+    repScopeClients.clear();
+    document.getElementById('loginSection').style.display = 'block';
+    document.getElementById('appSection').style.display = 'none';
+    document.getElementById('bottomBar').style.display = 'none';
+}
+
+async function showApp() {
     document.getElementById('loginSection').style.display = 'none';
     document.getElementById('appSection').style.display = 'block';
     document.getElementById('bottomBar').style.display = 'flex';
     document.getElementById('lblRepName').innerText = currentRep.name;
 
-    // Filter Clients by Authority
-    let filteredClients = allClients;
-    
-    // If the rep has a specific Area ID, ONLY show clients in that area.
-    if (currentRep.areaId > 0) {
-        // We filter by areaName. (Requires the API to send areaName for clients)
-        const repAreaStore = allStores.find(s => s.area && s.id === currentRep.areaId); 
-        // Fallback: If areaId doesn't map directly, we check by string matching
-        // (The C# API returns areaName for clients, so we filter that way)
-        filteredClients = allClients.filter(c => c.areaName && c.areaName.trim() !== "");
+    savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
+    renderSavedTable();
+
+    await refreshRepScope();
+    if (repScopeClients.size === 0) document.getElementById('showAllClients').checked = true;
+    refreshClientDropdowns();
+}
+
+function refreshClientDropdowns() {
+    const showAllEl = document.getElementById('showAllClients');
+    const showAll = showAllEl ? showAllEl.checked : true;
+
+    let list = allClients;
+    if (!showAll && repScopeClients.size > 0) {
+        list = allClients.filter(c => repScopeClients.has(c.name));
+        if (list.length === 0) list = allClients;
     }
 
-    const clientHtml = '<option value="">-- Select Client --</option>' + filteredClients.map(c =>
+    const clientHtml = '<option value="">-- Select Client --</option>' + list.map(c =>
         `<option value="${c.name}" data-id="${c.id || ''}" data-code="${c.code}" data-ar="${c.arabicName || ''}" data-area="${c.areaName || ''}" data-city="${c.cityName || ''}">${c.name}</option>`
     ).join('');
-    
+
     ['saleClient', 'retClient', 'payClient'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = clientHtml;
     });
-
-    savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
-    renderSavedTable();
 }
 
-// ------------------------------------------------------------------
-// FIXED STORE AUTO-SELECT (Case-insensitive + Fallback to All Stores)
-// ------------------------------------------------------------------
+function getStoreAreaCity(storeId) {
+    if (!storeId) return { area: '', city: '' };
+    const store = allStores.find(s => String(s.id) === String(storeId));
+    return store ? { area: store.area || '', city: store.city || '' } : { area: '', city: '' };
+}
+
 function autoSelectStore() {
     const clientSel = document.getElementById('saleClient');
     const cOpt = clientSel.options[clientSel.selectedIndex];
@@ -120,23 +272,10 @@ function autoSelectStore() {
         return;
     }
 
-    // 1. Try to find a SUB store matching the client's city
     let matchedStores = allStores.filter(s => s.type === 'SUB' && (s.city || '').trim().toLowerCase() === cityName && cityName !== '');
-    
-    // 2. Try to find a PARENT store matching the client's area
-    if (matchedStores.length === 0) {
-        matchedStores = allStores.filter(s => s.type === 'PARENT' && (s.area || '').trim().toLowerCase() === areaName && areaName !== '');
-    }
-    
-    // 3. Fallback to MAIN stores
-    if (matchedStores.length === 0) {
-        matchedStores = allStores.filter(s => s.type === 'MAIN');
-    }
-
-    // 4. If still empty, show ALL stores so the user is never stuck
-    if (matchedStores.length === 0) {
-        matchedStores = allStores;
-    }
+    if (matchedStores.length === 0) matchedStores = allStores.filter(s => s.type === 'PARENT' && (s.area || '').trim().toLowerCase() === areaName && areaName !== '');
+    if (matchedStores.length === 0) matchedStores = allStores.filter(s => s.type === 'MAIN');
+    if (matchedStores.length === 0) matchedStores = allStores;
 
     if (matchedStores.length > 0) {
         storeSel.innerHTML = matchedStores.map(store => 
@@ -149,26 +288,21 @@ function autoSelectStore() {
 
 function updatePrice(prefix) {
     const select = document.getElementById(prefix + 'Product');
-    if (!select) return;
-    const opt = select.options[select.selectedIndex];
-    if (!opt.value) return;
+    if (!select || !select.value) return;
+    const prodName = select.value;
+    const saleDate = new Date(document.getElementById(prefix + 'Date').value);
+    let validPrice = parseFloat(select.options[select.selectedIndex].getAttribute('data-price')) || 0;
 
-    const prodName = opt.value;
-    const dateInput = document.getElementById(prefix + 'Date');
-    if (!dateInput) return;
-    const saleDate = new Date(dateInput.value);
-
-    let validPrice = parseFloat(opt.getAttribute('data-price')) || 0;
     const histories = priceHistory.filter(h => h.productName === prodName && h.salesPrice > 0);
-    const validHist = histories
-        .filter(h => new Date(h.startDate) <= saleDate)
-        .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    const validHist = histories.filter(h => new Date(h.startDate) <= saleDate).sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
 
     if (validHist.length > 0) validPrice = validHist[0].salesPrice;
     document.getElementById(prefix + 'Price').value = validPrice;
 }
 
-// ---------------- SALES ----------------
+// ============================================================
+// SALES
+// ============================================================
 function addLineToInvoice() {
     const prodSel = document.getElementById('saleProduct');
     if (!prodSel.value) return alert("Select a product");
@@ -184,11 +318,8 @@ function addLineToInvoice() {
 
     const gross = qty * price;
     let netPrice = gross;
-    if (discountMethod === "Additive") {
-        netPrice = gross * (1 - ((reg + cash + add) / 100));
-    } else {
-        netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
-    }
+    if (discountMethod === "Additive") netPrice = gross * (1 - ((reg + cash + add) / 100));
+    else netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
     netPrice = Math.round(netPrice * 100) / 100;
 
     currentSale.lines.push({
@@ -199,7 +330,7 @@ function addLineToInvoice() {
     
     currentSale.total = Math.round((currentSale.total + netPrice) * 100) / 100;
     renderCurrentSale();
-
+    
     document.getElementById('saleProduct').value = '';
     document.getElementById('saleQty').value = 1;
     document.getElementById('salePrice').value = 0;
@@ -239,17 +370,16 @@ function saveSaleInvoice() {
     const inv = document.getElementById('saleInvoice').value.trim();
     const clientSel = document.getElementById('saleClient');
     const storeSel = document.getElementById('saleStore');
-    if (!inv || !clientSel.value || !storeSel.value || currentSale.lines.length === 0) {
-        return alert("Fill header and add lines.");
-    }
+    if (!inv || !clientSel.value || !storeSel.value || currentSale.lines.length === 0) return alert("Fill header and add lines.");
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
+    const storeAreaCity = getStoreAreaCity(storeSel.value);
     
     savedTx.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
         governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
-        storeId: storeSel.value,
+        storeId: storeSel.value, storeArea: storeAreaCity.area, storeCity: storeAreaCity.city,
         payType: document.getElementById('salePayType').value, 
         paid: parseFloat(document.getElementById('salePaid').value) || 0,
         total: currentSale.total, lines: currentSale.lines.map(l => ({ ...l }))
@@ -259,7 +389,9 @@ function saveSaleInvoice() {
     saveAndRender();
 }
 
-// ---------------- RETURNS (Fetches from Server DB) ----------------
+// ============================================================
+// RETURNS
+// ============================================================
 async function loadClientInvoices() {
     const clientSel = document.getElementById('retClient');
     const clientName = clientSel.value;
@@ -271,39 +403,41 @@ async function loadClientInvoices() {
         return;
     }
 
-    const cOpt = clientSel.options[clientSel.selectedIndex];
-    const clientId = cOpt.getAttribute('data-id');
-
+    const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
     let serverInvoices = [];
-    try {
-        // Call the C# endpoint we added
-        const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientInvoices?clientId=${clientId}`);
-        if (resp.ok) serverInvoices = await resp.json();
-    } catch(e) { console.warn("Offline, using local invoices"); }
+    
+    if (navigator.onLine) {
+        try {
+            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientInvoices?clientId=${clientId}`);
+            if (resp.ok) serverInvoices = await resp.json();
+        } catch(e) {}
+    }
 
-    // Also include local saved sales for this client that might not be synced yet
-    const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
-
-    // Combine (avoiding duplicates by invoiceNo)
     allInvoices = [...serverInvoices];
+
+    // Local Saved Sales
+    const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
     localSales.forEach(ls => {
         if (!allInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
             allInvoices.push({
-                id: 'local_' + ls.invoiceNo,
-                invoiceNumber: ls.invoiceNo,
-                date: ls.date,
-                total: ls.total,
-                lines: ls.lines.map(l => ({
-                    productName: l.product, productId: 0, qty: l.qty, price: l.price, netPrice: l.netPrice, cost: l.cost
-                })),
+                id: 'local_' + ls.invoiceNo, invoiceNumber: ls.invoiceNo, date: ls.date, total: ls.total,
+                lines: ls.lines.map(l => ({ productName: l.product, productId: 0, qty: l.qty, price: l.price, netPrice: l.netPrice, cost: l.cost })),
                 isLocal: true
             });
         }
     });
 
+    // Historical Cached Invoices
+    const histSales = historicalInvoices.filter(h => h.clientName === clientName);
+    histSales.forEach(hs => {
+        if (!allInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
+            allInvoices.push(hs);
+        }
+    });
+
     if (allInvoices.length === 0) {
         invSelect.innerHTML = '<option value="">-- No invoices found --</option>';
-        document.getElementById('retInvoiceLines').innerHTML = '<p class="text-danger small mb-0">No invoices found for this client.</p>';
+        document.getElementById('retInvoiceLines').innerHTML = '<p class="text-danger small mb-0">No invoices found.</p>';
         return;
     }
 
@@ -342,7 +476,6 @@ function loadInvoiceLines() {
 
     document.getElementById('retReturnNo').value = 'RET-' + inv.invoiceNumber;
     document.getElementById('retDate').value = new Date().toISOString().split('T')[0];
-
     updateRetLineTotal();
 }
 
@@ -366,8 +499,7 @@ function updateRetLineTotal() {
 
         const lineTotal = Math.round(qty * line.price * 100) / 100;
         currentRet.lines.push({
-            productName: line.productName,
-            productId: line.productId, // Crucial for DB insert
+            productName: line.productName, productId: line.productId,
             cost: line.cost, qty: qty, price: line.price, total: lineTotal
         });
         currentRet.total = Math.round((currentRet.total + lineTotal) * 100) / 100;
@@ -416,39 +548,24 @@ async function saveReturn() {
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
 
-    // 1. Try to save directly to the Server DB
-    if (navigator.onLine) {
+    if (navigator.onLine && clientId > 0 && originalInv.productId !== 0) {
         try {
             const payload = {
-                clientId: clientId,
-                returnNumber: returnNo,
-                returnDate: document.getElementById('retDate').value,
-                originalSaleId: originalInv.isLocal ? 0 : originalInv.id,
-                storeId: 1, // Note: you may need to fetch the storeId from the invoice or let user pick
-                repName: currentRep.name,
-                items: currentRet.lines.map(l => ({
-                    productId: l.productId,
-                    quantity: l.qty,
-                    price: l.price,
-                    cost: l.cost
-                }))
+                clientId: clientId, returnNumber: returnNo, returnDate: document.getElementById('retDate').value,
+                originalSaleId: originalInv.isLocal ? 0 : originalInv.id, storeId: 1, repName: currentRep.name,
+                items: currentRet.lines.map(l => ({ productId: l.productId, quantity: l.qty, price: l.price, cost: l.cost }))
             };
             const resp = await fetch('https://saluteonline.runasp.net/api/MobileData/CreateReturn', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (resp.ok) {
                 alert("Return saved successfully to Database!");
                 clearCurrentRet(true);
                 return;
             }
-        } catch (e) {
-            console.warn("Server save failed, falling back to local Excel export.");
-        }
+        } catch (e) {}
     }
 
-    // 2. Fallback: Save locally (Excel Export flow)
     savedTx.push({
         type: 'Return', invoiceNo: returnNo, originalInvoiceNo: originalInv.invoiceNumber,
         date: document.getElementById('retDate').value, client: clientName,
@@ -462,33 +579,26 @@ async function saveReturn() {
     alert("Return saved locally (Offline Mode).");
 }
 
-// ---------------- PAYMENTS ----------------
+// ============================================================
+// PAYMENTS
+// ============================================================
 async function savePayment() {
     const inv = document.getElementById('payInvoice').value.trim();
     const clientSel = document.getElementById('payClient');
     const amount = parseFloat(document.getElementById('payAmount').value);
-    
-    if (!inv || !clientSel.value || !amount || amount <= 0) {
-        return alert("Fill all fields with a positive amount.");
-    }
+    if (!inv || !clientSel.value || !amount || amount <= 0) return alert("Fill all fields with a positive amount.");
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
 
-    // 1. Try Server DB
     if (navigator.onLine && clientId > 0) {
         try {
             const payload = {
-                clientId: clientId,
-                paymentDate: document.getElementById('payDate').value,
-                amount: amount,
-                receiptNumber: inv,
-                repName: currentRep.name
+                clientId: clientId, paymentDate: document.getElementById('payDate').value,
+                amount: amount, receiptNumber: inv, repName: currentRep.name
             };
             const resp = await fetch('https://saluteonline.runasp.net/api/MobileData/CreatePayment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (resp.ok) {
                 alert("Payment saved to Database!");
@@ -497,28 +607,25 @@ async function savePayment() {
                 document.getElementById('payClient').value = '';
                 return;
             }
-        } catch (e) {
-            console.warn("Server save failed, saving locally.");
-        }
+        } catch (e) {}
     }
 
-    // 2. Fallback: Save locally
     savedTx.push({
         type: 'Payment', invoiceNo: inv, date: document.getElementById('payDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
-        total: amount, lines: []
+        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'), total: amount, lines: []
     });
 
     document.getElementById('payAmount').value = 0;
     document.getElementById('payInvoice').value = '';
     document.getElementById('payClient').value = '';
-    
     saveAndRender();
     alert("Payment saved locally (Offline Mode).");
 }
 
-// ---------------- MY REPORTS ----------------
+// ============================================================
+// REPORTS & HISTORY
+// ============================================================
 async function loadMyReports() {
     const tbody = document.getElementById('reportLines');
     tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
@@ -548,7 +655,34 @@ async function loadMyReports() {
     }
 }
 
-// ---------------- SHARED ----------------
+async function downloadHistory() {
+    if (!currentRep) return alert("Login first.");
+    if (!navigator.onLine) return alert("You must be online to download history.");
+
+    const btn = document.getElementById('btnDownloadHistory');
+    btn.innerHTML = '⏳ Downloading...';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/HistoricalInvoices?repName=${encodeURIComponent(currentRep.name)}`);
+        if (!resp.ok) throw new Error("Failed");
+        
+        const data = await resp.json();
+        historicalInvoices = data;
+        localStorage.setItem('salute_historical_invoices', JSON.stringify(data));
+        
+        alert(`Successfully downloaded ${data.length} historical invoices for offline Returns!`);
+    } catch (e) {
+        alert("Failed to download history. Check your connection.");
+    } finally {
+        btn.innerHTML = '📥 Download History';
+        btn.disabled = false;
+    }
+}
+
+// ============================================================
+// SHARED & EXPORT
+// ============================================================
 function saveAndRender() {
     localStorage.setItem('salute_saved_v2', JSON.stringify(savedTx));
     renderSavedTable();
@@ -568,16 +702,9 @@ function renderSavedTable() {
     document.getElementById('savedCount').innerText = savedTx.length + " Saved";
 }
 
-function removeTx(i) { 
-    if(confirm("Delete this saved transaction entirely?")) {
-        savedTx.splice(i, 1); 
-        saveAndRender(); 
-    }
-}
-
+function removeTx(i) { if(confirm("Delete this saved transaction?")) { savedTx.splice(i, 1); saveAndRender(); } }
 function clearAll() { if(confirm("Clear ALL saved transactions?")) { savedTx = []; saveAndRender(); } }
 
-// ---------------- EXPORT EXCEL ----------------
 function exportExcel() {
     if (savedTx.length === 0) return alert("No data.");
     let excelData = [];
@@ -624,9 +751,7 @@ function exportExcel() {
     });
 
     const ws = XLSX.utils.json_to_sheet(excelData);
-    ws['!cols'] = [];
-    ws['!cols'][16] = { hidden: true };
-    ws['!cols'][30] = { hidden: true };
+    ws['!cols'] = []; ws['!cols'][16] = { hidden: true }; ws['!cols'][30] = { hidden: true };
     ws['!protect'] = { password: "SaluteAdmin2026", formatColumns: false, formatCells: false, selectLockedCells: false };
 
     const wb = XLSX.utils.book_new();
