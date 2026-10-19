@@ -21,6 +21,16 @@
         #retInvoiceLines table { margin-bottom: 0; }
         #syncStatus { cursor: pointer; font-size: 11px; }
         #connectionStatus { font-size: 11px; }
+        #syncIntervalSelect {
+            background-color: rgba(255,255,255,0.9);
+            color: #0d6efd;
+            border: none;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 4px;
+            height: 22px;
+        }
     </style>
 </head>
 <body>
@@ -28,11 +38,21 @@
 <nav class="navbar navbar-dark mb-2 shadow-sm">
     <div class="container-fluid">
         <span class="navbar-brand mb-0 h6">Salute App</span>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-1 flex-wrap">
             <span id="syncStatus"
                   class="badge bg-secondary"
                   onclick="syncNow()"
                   title="Tap to sync with server">🔄 Sync</span>
+            <select id="syncIntervalSelect"
+                    onchange="changeSyncInterval(this.value)"
+                    title="Auto-sync frequency">
+                <option value="0">Manual</option>
+                <option value="900000">15 min</option>
+                <option value="1800000">30 min</option>
+                <option value="2700000">45 min</option>
+                <option value="3600000">1 hr</option>
+                <option value="86400000">Daily</option>
+            </select>
             <span id="connectionStatus" class="badge bg-warning text-dark">Offline</span>
         </div>
     </div>
