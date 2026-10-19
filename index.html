@@ -175,14 +175,26 @@
                 <div class="card">
                     <div class="card-body p-2">
                         <div class="row g-2 mb-2">
+                            <div class="col-12"><label class="form-label">Client</label>
+                                <select id="payClient" class="form-select form-select-sm" onchange="loadPaymentInvoices()"></select>
+                            </div>
+                        </div>
+                        
+                        <div class="row g-2 mb-2">
+                            <div class="col-12"><label class="form-label">Invoice to Pay</label>
+                                <select id="payInvoiceSelect" class="form-select form-select-sm">
+                                    <option value="">-- Select Client first --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
                             <div class="col-6"><label class="form-label">Receipt #</label><input type="text" id="payInvoice" class="form-control form-control-sm"></div>
                             <div class="col-6"><label class="form-label">Date</label><input type="date" id="payDate" class="form-control form-control-sm"></div>
                         </div>
-                        <div class="row g-2 mb-2">
-                            <div class="col-12"><label class="form-label">Client</label><select id="payClient" class="form-select form-select-sm"></select></div>
-                        </div>
+                        
                         <div class="row g-2 align-items-end mb-2">
-                            <div class="col-12"><label class="form-label">Amount</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
+                            <div class="col-12"><label class="form-label">Amount to Pay</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
                         </div>
                         <button class="btn btn-info w-100 fw-bold py-2 shadow-sm text-white" onclick="savePayment()">💾 Save Payment</button>
                     </div>
