@@ -637,7 +637,7 @@ async function loadPaymentInvoices() {
 
 async function savePayment() {
     const invSelect = document.getElementById('payInvoiceSelect');
-    const inv = invSelect.value; // This is the invoice number now
+    const inv = invSelect.value; 
     const clientSel = document.getElementById('payClient');
     const amount = parseFloat(document.getElementById('payAmount').value);
     
@@ -648,7 +648,6 @@ async function savePayment() {
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
     
-    // Get total from the selected option just for record keeping in Excel
     const invTotal = parseFloat(invSelect.options[invSelect.selectedIndex].getAttribute('data-total')) || 0;
 
     if (navigator.onLine && clientId > 0) {
@@ -786,7 +785,6 @@ function exportExcel() {
         const quarter = "Q" + Math.ceil((month + 1) / 3);
 
         if (isPay) {
-            // Fully populate the 32 columns for Payment exactly as requested
             excelData.push({
                 "qurter": quarter, 
                 "code": "MISC", 
@@ -799,17 +797,17 @@ function exportExcel() {
                 "discount": "0%", 
                 "netprice": 0,
                 "arabicname": t.clientAr, 
-                "invoiceno": t.originalInvoiceNo, // Links to the specific invoice
+                "invoiceno": t.originalInvoiceNo, 
                 "client": t.client, 
                 "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
                 "super visor": currentRep.supervisor, 
                 "sales rep": currentRep.name, 
                 "cost": 0, 
-                "docno": t.invoiceNo, // Receipt number
+                "docno": t.invoiceNo, 
                 "paymentmethod": "Cash", 
                 "returns": 0, 
-                "collected": t.total, // The actual payment amount
-                "requestedamount": t.invoiceTotal || 0, // Total of the original invoice
+                "collected": t.total, 
+                "requestedamount": t.invoiceTotal || 0, 
                 "totalofreturn": 0, 
                 "returnsprice": 0, 
                 "return": 0, 
