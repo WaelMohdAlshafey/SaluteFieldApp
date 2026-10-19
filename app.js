@@ -391,7 +391,7 @@ function saveSaleInvoice() {
 }
 
 // ============================================================
-// RETURNS
+// RETURNS (LOCAL ONLY)
 // ============================================================
 async function loadClientInvoices() {
     const clientSel = document.getElementById('retClient');
@@ -535,7 +535,7 @@ function clearCurrentRet(silent) {
     document.getElementById('retInvoiceLines').innerHTML = '<p class="text-muted small mb-0">Select a client and invoice to load lines.</p>';
 }
 
-async function saveReturn() {
+function saveReturn() {
     const returnNo = document.getElementById('retReturnNo').value.trim();
     const clientSel = document.getElementById('retClient');
     const clientName = clientSel.value;
@@ -547,25 +547,6 @@ async function saveReturn() {
 
     const originalInv = allInvoices[parseInt(invIdx)];
     const cOpt = clientSel.options[clientSel.selectedIndex];
-    const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
-
-    if (navigator.onLine && clientId > 0 && originalInv.productId !== 0) {
-        try {
-            const payload = {
-                clientId: clientId, returnNumber: returnNo, returnDate: document.getElementById('retDate').value,
-                originalSaleId: originalInv.isLocal ? 0 : originalInv.id, storeId: 1, repName: currentRep.name,
-                items: currentRet.lines.map(l => ({ productId: l.productId, quantity: l.qty, price: l.price, cost: l.cost }))
-            };
-            const resp = await fetch('https://saluteonline.runasp.net/api/MobileData/CreateReturn', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            });
-            if (resp.ok) {
-                alert("Return saved successfully to Database!");
-                clearCurrentRet(true);
-                return;
-            }
-        } catch (e) {}
-    }
 
     savedTx.push({
         type: 'Return', invoiceNo: returnNo, originalInvoiceNo: originalInv.invoiceNumber,
@@ -577,11 +558,11 @@ async function saveReturn() {
 
     clearCurrentRet(true);
     saveAndRender();
-    alert("Return saved locally (Offline Mode).");
+    alert("Return saved locally. It will be exported in the Excel file.");
 }
 
 // ============================================================
-// PAYMENTS
+// PAYMENTS (LOCAL ONLY)
 // ============================================================
 async function loadPaymentInvoices() {
     const clientSel = document.getElementById('payClient');
@@ -607,6 +588,7 @@ async function loadPaymentInvoices() {
 
     let allClientInvoices = [...serverInvoices];
 
+    // Local Saved Sales
     const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
     localSales.forEach(ls => {
         if (!allClientInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
@@ -616,6 +598,7 @@ async function loadPaymentInvoices() {
         }
     });
 
+    // Historical Cached Invoices
     const histSales = historicalInvoices.filter(h => h.clientName === clientName);
     histSales.forEach(hs => {
         if (!allClientInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
@@ -634,7 +617,7 @@ async function loadPaymentInvoices() {
     });
 }
 
-async function savePayment() {
+function savePayment() {
     const invSelect = document.getElementById('payInvoiceSelect');
     const inv = invSelect.value; 
     const clientSel = document.getElementById('payClient');
@@ -645,27 +628,7 @@ async function savePayment() {
     }
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
-    const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
-    
     const invTotal = parseFloat(invSelect.options[invSelect.selectedIndex].getAttribute('data-total')) || 0;
-
-    if (navigator.onLine && clientId > 0) {
-        try {
-            const payload = {
-                clientId: clientId, paymentDate: document.getElementById('payDate').value,
-                amount: amount, receiptNumber: document.getElementById('payInvoice').value.trim() || inv, 
-                repName: currentRep.name
-            };
-            const resp = await fetch('https://saluteonline.runasp.net/api/MobileData/CreatePayment', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            });
-            if (resp.ok) {
-                alert("Payment saved to Database!");
-                clearPaymentForm();
-                return;
-            }
-        } catch (e) {}
-    }
 
     savedTx.push({
         type: 'Payment', 
@@ -680,7 +643,7 @@ async function savePayment() {
 
     clearPaymentForm();
     saveAndRender();
-    alert("Payment saved locally (Offline Mode).");
+    alert("Payment saved locally. It will be exported in the Excel file.");
 }
 
 function clearPaymentForm() {
@@ -936,17 +899,28 @@ function renderSavedTable() {
         tbody.innerHTML += `<tr>
             <td><span class="badge ${cls}">${t.type}</span></td>
             <td>${t.invoiceNo}</td><td>${t.client}</td><td>${t.total.toFixed(2)}</td>
-            <td><button class="btn btn-sm text-danger p-0" onclick="removeTx(${i})">✖</button></td>
+            <td><button class="btn btn-sm text-danger p-0" onclick="removeTx(${i})" title="Delete">✖</button></td>
         </tr>`;
     });
     document.getElementById('savedCount').innerText = savedTx.length + " Saved";
 }
 
-function removeTx(i) { if(confirm("Delete this saved transaction?")) { savedTx.splice(i, 1); saveAndRender(); } }
-function clearAll() { if(confirm("Clear ALL saved transactions?")) { savedTx = []; saveAndRender(); } }
+function removeTx(i) { 
+    if(confirm("Delete this saved transaction? This cannot be undone.")) { 
+        savedTx.splice(i, 1); 
+        saveAndRender(); 
+    } 
+}
+
+function clearAll() { 
+    if(confirm("Clear ALL saved transactions? This cannot be undone.")) { 
+        savedTx = []; 
+        saveAndRender(); 
+    } 
+}
 
 function exportExcel() {
-    if (savedTx.length === 0) return alert("No data.");
+    if (savedTx.length === 0) return alert("No data to export.");
     let excelData = [];
 
     savedTx.forEach(t => {
