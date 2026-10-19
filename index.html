@@ -75,10 +75,10 @@
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button></li>
             
-            <!-- NEW INVOICES TAB -->
-            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#invoices" type="button" onclick="loadCombinedInvoices()">Invoices</button></li>
+            <!-- NEW STATEMENT TAB -->
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statement" type="button">Statement</button></li>
             
-            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports" type="button" onclick="loadMyReports()">My Reports</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports" type="button" onclick="loadMyReports()">Reports</button></li>
         </ul>
 
         <div class="tab-content" id="appTabsContent">
@@ -205,29 +205,72 @@
                 </div>
             </div>
 
-            <!-- ================ COMBINED INVOICES ================ -->
-            <div class="tab-pane fade" id="invoices" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-dark text-white py-2 fw-bold d-flex justify-content-between align-items-center">
-                        <span>All Invoices & Balances</span>
-                        <button class="btn btn-sm btn-light py-0" onclick="loadCombinedInvoices()">🔄 Refresh</button>
+            <!-- ================ STATEMENT ================ -->
+            <div class="tab-pane fade" id="statement" role="tabpanel">
+                <div class="card mb-2">
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label">Client</label>
+                                <select id="stmtClient" class="form-select form-select-sm" onchange="loadStatementClient()"></select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Select Invoice</label>
+                                <select id="stmtInvoice" class="form-select form-select-sm" onchange="renderInvoiceStatement()">
+                                    <option value="">-- Select Client first --</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div class="table-responsive" style="max-height: 500px;">
-                        <table class="table table-sm table-striped mb-0" style="font-size:11px;">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Invoice</th>
-                                    <th>Client</th>
-                                    <th class="text-end">Total</th>
-                                    <th class="text-end">Balance</th>
-                                    <th>Source</th>
-                                </tr>
-                            </thead>
-                            <tbody id="combinedInvoiceLines">
-                                <tr><td colspan="6" class="text-center text-muted">Click 'Refresh' to load data</td></tr>
-                            </tbody>
-                        </table>
+                </div>
+
+                <div id="stmtDetails" style="display: none;">
+                    <!-- HEADER -->
+                    <div class="card mb-2">
+                        <div class="card-header bg-dark text-white py-2 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold" id="stmtInvNo">Invoice #</span>
+                            <span id="stmtInvSource" class="badge">Source</span>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="row text-center">
+                                <div class="col-4"><small class="text-muted d-block">Date</small><span id="stmtInvDate" class="fw-bold"></span></div>
+                                <div class="col-4"><small class="text-muted d-block">Total</small><span id="stmtInvTotal" class="fw-bold"></span></div>
+                                <div class="col-4"><small class="text-muted d-block">Balance</small><span id="stmtInvBalance" class="fw-bold"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LINES -->
+                    <div class="card mb-2">
+                        <div class="card-header bg-light py-1 fw-bold" style="font-size:12px">Invoice Lines</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" style="font-size:11px">
+                                <thead><tr><th>Product</th><th class="text-end">Qty</th><th class="text-end">Price</th><th class="text-end">Total</th><th>Src</th></tr></thead>
+                                <tbody id="stmtInvLines"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- PAYMENTS -->
+                    <div class="card mb-2">
+                        <div class="card-header bg-light py-1 fw-bold" style="font-size:12px">Payments</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" style="font-size:11px">
+                                <thead><tr><th>Date</th><th>Receipt #</th><th class="text-end">Amount</th><th>Src</th></tr></thead>
+                                <tbody id="stmtInvPayments"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RETURNS -->
+                    <div class="card mb-2">
+                        <div class="card-header bg-light py-1 fw-bold" style="font-size:12px">Returns</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" style="font-size:11px">
+                                <thead><tr><th>Date</th><th>Return #</th><th class="text-end">Amount</th><th>Src</th></tr></thead>
+                                <tbody id="stmtInvReturns"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
