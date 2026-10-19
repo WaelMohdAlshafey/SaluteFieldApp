@@ -17,8 +17,10 @@
         .nav-tabs .nav-link { color: #495057; font-weight: bold; font-size: 12px; padding: 8px 12px; }
         .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
         .current-box { background-color: #e9ecef; border: 2px dashed #6c757d; padding: 10px; border-radius: 10px; margin-bottom: 15px; }
-        .ret-lines-wrap { max-height: 220px; overflow-y: auto; }
+        .ret-lines-wrap { max-height: 240px; overflow-y: auto; }
         #retInvoiceLines table { margin-bottom: 0; }
+        #syncStatus { cursor: pointer; font-size: 11px; }
+        #connectionStatus { font-size: 11px; }
     </style>
 </head>
 <body>
@@ -26,7 +28,13 @@
 <nav class="navbar navbar-dark mb-2 shadow-sm">
     <div class="container-fluid">
         <span class="navbar-brand mb-0 h6">Salute App</span>
-        <span id="connectionStatus" class="badge bg-warning text-dark">Offline</span>
+        <div class="d-flex align-items-center gap-2">
+            <span id="syncStatus"
+                  class="badge bg-secondary"
+                  onclick="syncNow()"
+                  title="Tap to sync with server">🔄 Sync</span>
+            <span id="connectionStatus" class="badge bg-warning text-dark">Offline</span>
+        </div>
     </div>
 </nav>
 
@@ -47,11 +55,12 @@
         <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success">👤 <span id="lblRepName"></span></span>
             <div class="d-flex align-items-center gap-2">
-                <label class="form-check-label small mb-0">
+                <label class="form-check-label small mb-0" title="Uncheck to only see clients you already sold to">
                     <input type="checkbox" id="showAllClients" class="form-check-input" onchange="refreshClientDropdowns()">
                     Show all clients
                 </label>
                 <span class="badge bg-dark" id="savedCount">0 Saved</span>
+                <button class="btn btn-sm btn-outline-secondary py-0" style="font-size:11px" onclick="logoutRep()">Logout</button>
             </div>
         </div>
 
