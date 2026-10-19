@@ -314,49 +314,57 @@
             <!-- ================ MY REPORTS ================ -->
             <div class="tab-pane fade" id="reports" role="tabpanel">
                 <div class="card">
-                    <div class="card-header bg-primary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
-                        <span>My Sales Report (Server)</span>
-                        <div class="d-flex gap-1">
-                            <button class="btn btn-sm btn-light py-0" onclick="loadMyReports()">🔄 Refresh</button>
-                            <button class="btn btn-sm btn-success py-0 fw-bold" id="btnDownloadHistory" onclick="downloadHistory()">📥 Download History</button>
-                        </div>
+                    <div class="card-header bg-primary text-white py-2 fw-bold">
+                        <span>Sales by Client (Server Data)</span>
                     </div>
                     <div class="card-body p-2 bg-light">
-                        <!-- SUMMARY CARDS -->
-                        <div class="row g-2" id="reportSummary" style="display: none;">
-                            <div class="col-4">
+                        
+                        <!-- Date Filters -->
+                        <div class="row g-2 mb-2">
+                            <div class="col-5">
+                                <label class="form-label">From Date</label>
+                                <input type="date" id="repFromDate" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-5">
+                                <label class="form-label">To Date</label>
+                                <input type="date" id="repToDate" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-2 d-flex align-items-end">
+                                <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="loadMyReports()">Show</button>
+                            </div>
+                        </div>
+
+                        <!-- Summary Cards -->
+                        <div class="row g-2 mt-2" id="reportSummary" style="display: none;">
+                            <div class="col-6">
                                 <div class="summary-box">
                                     <small class="text-muted d-block">Total Sales</small>
                                     <span class="fw-bold text-dark" id="repTotalSales">0.00</span>
                                 </div>
                             </div>
-                            <div class="col-4">
+                            <div class="col-6">
                                 <div class="summary-box">
-                                    <small class="text-muted d-block">Collected</small>
-                                    <span class="fw-bold text-success" id="repTotalPaid">0.00</span>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="summary-box">
-                                    <small class="text-muted d-block">Balance</small>
+                                    <small class="text-muted d-block">Total Balance</small>
                                     <span class="fw-bold text-danger" id="repTotalBalance">0.00</span>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Table grouped by Client -->
                     <div class="table-responsive" style="max-height: 500px;">
                         <table class="table table-sm table-striped mb-0">
                             <thead>
                                 <tr>
-                                    <th>Date</th>
-                                    <th>Invoice</th>
-                                    <th class="text-end">Total</th>
+                                    <th>Client</th>
+                                    <th class="text-center">Invoices</th>
+                                    <th class="text-end">Total Sales</th>
                                     <th class="text-end">Paid</th>
                                     <th class="text-end">Balance</th>
                                 </tr>
                             </thead>
                             <tbody id="reportLines">
-                                <tr><td colspan="5" class="text-center text-muted">Click 'Refresh' to load data</td></tr>
+                                <tr><td colspan="5" class="text-center text-muted">Select dates and click 'Show'</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -386,7 +394,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-<!-- ?v=15 forces the browser to load the new app.js -->
-<script src="app.js?v=15"></script>
+<!-- ?v=16 forces the browser to load the new app.js -->
+<script src="app.js?v=16"></script>
 </body>
 </html>
