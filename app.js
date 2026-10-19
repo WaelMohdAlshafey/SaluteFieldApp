@@ -319,10 +319,16 @@ function addLineToInvoice() {
 
     const gross = qty * price;
     let netPrice = gross;
-    if (discountMethod === "Additive") netPrice = gross * (1 - ((reg + cash + add) / 100));
-    else netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
-    netPrice = Math.round(netPrice * 100) / 100;
     
+    // MATCHING SERVER C# LOGIC EXACTLY
+    if (discountMethod === "Additive") {
+        netPrice = gross * (1 - ((reg + cash + add) / 100));
+    } else {
+        // Sequential (Compound) - Default
+        netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
+    }
+    
+    netPrice = Math.round(netPrice * 100) / 100;
     const discountAmount = Math.round((gross - netPrice) * 100) / 100;
 
     currentSale.lines.push({
@@ -412,7 +418,7 @@ function saveSaleInvoice() {
 }
 
 // ============================================================
-// RETURNS (USING NET PRICE)
+// RETURNS (LOCAL ONLY)
 // ============================================================
 async function loadClientInvoices() {
     const clientSel = document.getElementById('retClient');
