@@ -8,7 +8,7 @@ let allStores = [];
 let priceHistory = [];
 let discountMethod = "Sequential";
 let savedTx = [];
-let currentSale = { lines: [], total: 0 };
+let currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
 let currentRet = { lines: [], total: 0 };
 let currentRep = null;
 let allInvoices = []; 
@@ -322,6 +322,8 @@ function addLineToInvoice() {
     if (discountMethod === "Additive") netPrice = gross * (1 - ((reg + cash + add) / 100));
     else netPrice = gross * (1 - reg / 100) * (1 - cash / 100) * (1 - add / 100);
     netPrice = Math.round(netPrice * 100) / 100;
+    
+    const discountAmount = gross - netPrice;
 
     currentSale.lines.push({
         product: prodSel.value, productCode: pOpt.getAttribute('data-code'),
@@ -329,37 +331,55 @@ function addLineToInvoice() {
         qty, price, disc: (reg + cash + add), netPrice, total: netPrice
     });
     
+    currentSale.gross = Math.round((currentSale.gross + gross) * 100) / 100;
+    currentSale.discount = Math.round((currentSale.discount + discountAmount) * 100) / 100;
     currentSale.total = Math.round((currentSale.total + netPrice) * 100) / 100;
+    
     renderCurrentSale();
     
+    // Clear all fields completely
     document.getElementById('saleProduct').value = '';
     document.getElementById('saleQty').value = 1;
     document.getElementById('salePrice').value = 0;
     document.getElementById('saleReg').value = 0;
     document.getElementById('saleCash').value = 0;
     document.getElementById('saleAdd').value = 0;
+    
+    // Focus back to product for quick entry
+    document.getElementById('saleProduct').focus();
 }
 
 function renderCurrentSale() {
     const tbody = document.getElementById('currentSaleLines');
     tbody.innerHTML = currentSale.lines.map((l, index) => `
         <tr>
-            <td>${l.product}</td><td>${l.qty}</td><td>${l.netPrice.toFixed(2)}</td>
+            <td>${l.product}</td>
+            <td>${l.qty}</td>
+            <td>${l.price.toFixed(2)}</td>
+            <td>${l.disc}%</td>
+            <td class="text-end fw-bold">${l.netPrice.toFixed(2)}</td>
             <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentSaleLine(${index})">✖</button></td>
         </tr>
     `).join('');
+    document.getElementById('currentSaleGross').innerText = currentSale.gross.toFixed(2);
+    document.getElementById('currentSaleDiscount').innerText = currentSale.discount.toFixed(2);
     document.getElementById('currentSaleTotal').innerText = currentSale.total.toFixed(2);
 }
 
 function removeCurrentSaleLine(index) {
-    const removedLine = currentSale.lines.splice(index, 1)[0];
-    currentSale.total = Math.round((currentSale.total - removedLine.netPrice) * 100) / 100;
+    const removed = currentSale.lines.splice(index, 1)[0];
+    const gross = removed.qty * removed.price;
+    const discount = gross - removed.netPrice;
+    
+    currentSale.gross = Math.round((currentSale.gross - gross) * 100) / 100;
+    currentSale.discount = Math.round((currentSale.discount - discount) * 100) / 100;
+    currentSale.total = Math.round((currentSale.total - removed.netPrice) * 100) / 100;
     renderCurrentSale();
 }
 
 function clearCurrentSale() {
     if (confirm("Clear this entire current invoice?")) {
-        currentSale = { lines: [], total: 0 };
+        currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
         renderCurrentSale();
         document.getElementById('saleInvoice').value = '';
         document.getElementById('saleClient').value = '';
@@ -391,7 +411,7 @@ function saveSaleInvoice() {
 }
 
 // ============================================================
-// RETURNS (LOCAL ONLY)
+// RETURNS (USING NET PRICE)
 // ============================================================
 async function loadClientInvoices() {
     const clientSel = document.getElementById('retClient');
@@ -422,7 +442,10 @@ async function loadClientInvoices() {
         if (!allInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
             allInvoices.push({
                 id: 'local_' + ls.invoiceNo, invoiceNumber: ls.invoiceNo, date: ls.date, total: ls.total,
-                lines: ls.lines.map(l => ({ productName: l.product, productId: 0, qty: l.qty, price: l.price, netPrice: l.netPrice, cost: l.cost })),
+                lines: ls.lines.map(l => ({ 
+                    productName: l.product, productId: 0, qty: l.qty, 
+                    price: l.price, netPrice: l.netPrice, disc: l.disc, cost: l.cost 
+                })),
                 isLocal: true
             });
         }
@@ -459,14 +482,17 @@ function loadInvoiceLines() {
     const inv = allInvoices[parseInt(invIdx)];
     if (!inv) return;
 
-    let html = '<table class="table table-sm mb-0"><thead><tr><th style="width:28px"></th><th>Product</th><th>Sold</th><th>Return</th><th>Price</th></tr></thead><tbody>';
+    let html = '<table class="table table-sm mb-0"><thead><tr><th style="width:28px"></th><th>Product</th><th>Sold</th><th>Return</th><th class="text-end">Net Price</th></tr></thead><tbody>';
     inv.lines.forEach((line, i) => {
+        // Use netPrice if available, fallback to price
+        const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
+        
         html += `<tr>
             <td><input type="checkbox" class="form-check-input ret-line-check" data-idx="${i}" onchange="updateRetLineTotal()"></td>
             <td style="font-size:11px">${line.productName}</td>
             <td>${line.qty}</td>
             <td><input type="number" class="form-control form-control-sm ret-line-qty" data-idx="${i}" value="${line.qty}" min="0" max="${line.qty}" style="width:60px" onchange="updateRetLineTotal()"></td>
-            <td>${line.price.toFixed(2)}</td>
+            <td class="text-end fw-bold">${actualNetPrice.toFixed(2)}</td>
         </tr>`;
     });
     html += '</tbody></table>';
@@ -498,10 +524,13 @@ function updateRetLineTotal() {
         if (qty <= 0) return;
         if (qty > line.qty) { qty = line.qty; qtyInput.value = line.qty; }
 
-        const lineTotal = Math.round(qty * line.price * 100) / 100;
+        // Calculate using NET price
+        const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
+        const lineTotal = Math.round(qty * actualNetPrice * 100) / 100;
+        
         currentRet.lines.push({
             productName: line.productName, productId: line.productId,
-            cost: line.cost, qty: qty, price: line.price, total: lineTotal
+            cost: line.cost, qty: qty, price: actualNetPrice, total: lineTotal
         });
         currentRet.total = Math.round((currentRet.total + lineTotal) * 100) / 100;
     });
@@ -513,7 +542,10 @@ function renderCurrentRet() {
     const tbody = document.getElementById('currentRetLines');
     tbody.innerHTML = currentRet.lines.map((l, index) => `
         <tr>
-            <td>${l.productName}</td><td>${l.qty}</td><td>${l.total.toFixed(2)}</td>
+            <td>${l.productName}</td>
+            <td>${l.qty}</td>
+            <td class="text-end">${l.price.toFixed(2)}</td>
+            <td class="text-end fw-bold text-danger">${l.total.toFixed(2)}</td>
             <td><button class="btn btn-sm text-danger p-0" onclick="removeCurrentRetLine(${index})">✖</button></td>
         </tr>
     `).join('');
@@ -682,7 +714,7 @@ async function loadStatementClient() {
         date: s.date,
         total: s.total,
         amountPaid: s.paid || 0,
-        lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.price, total: l.netPrice })),
+        lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.netPrice, total: l.netPrice })),
         isLocal: true
     }));
 
