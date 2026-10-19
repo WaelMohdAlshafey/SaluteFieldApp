@@ -17,8 +17,10 @@ let currentStatementData = { invoices: [], payments: [], returns: [] };
 
 let currentReportMode = 'sales'; 
 let rawServerSales = []; 
+let rawServerBalances = [];
 let rawServerPayments = [];
 let rawServerReturns = [];
+let rawServerOpening = {};
 
 let repScopeClients = new Set();
 let lastSyncTime = 0;
@@ -976,58 +978,16 @@ async function loadMyReports() {
 
         const data = await response.json();
         rawServerSales = data.sales || [];
+        rawServerBalances = data.balances || [];
         rawServerPayments = data.payments || [];
         rawServerReturns = data.returns || [];
+        rawServerOpening = data.openingBalances || {};
 
-        if (rawServerSales.length === 0 && rawServerPayments.length === 0 && rawServerReturns.length === 0) {
+        if (rawServerSales.length === 0 && rawServerBalances.length === 0 && rawServerPayments.length === 0 && rawServerReturns.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data found on server for this period.</td></tr>';
             return;
         }
 
-        // --- CALCULATE SUMMARY TOTALS & GROUPING ---
-        let totalSales = 0;
-        let totalPaid = 0;
-        let totalReturns = 0;
-
-        const grouped = {};
-        function ensureClient(c) { if(!grouped[c]) grouped[c] = { invoices: 0, total: 0, paid: 0, returns: 0, balance: 0 }; }
-
-        rawServerSales.forEach(s => {
-            const c = s.client || 'Unknown';
-            ensureClient(c);
-            grouped[c].invoices += 1;
-            grouped[c].total += (s.total || 0);
-            grouped[c].paid += (s.paid || 0); 
-            
-            totalSales += (s.total || 0);
-            totalPaid += (s.paid || 0);
-        });
-
-        rawServerPayments.forEach(p => {
-            const c = p.client || 'Unknown';
-            ensureClient(c);
-            grouped[c].paid += p.amount;
-            totalPaid += p.amount;
-        });
-
-        rawServerReturns.forEach(r => {
-            const c = r.client || 'Unknown';
-            ensureClient(c);
-            grouped[c].returns += r.amount;
-            totalReturns += r.amount;
-        });
-
-        let totalBalance = 0;
-        Object.keys(grouped).forEach(c => {
-            grouped[c].balance = grouped[c].total - grouped[c].paid - grouped[c].returns;
-            totalBalance += grouped[c].balance;
-        });
-
-        document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
-        document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
-        document.getElementById('reportSummary').style.display = 'flex';
-
-        window.currentGroupedData = grouped;
         renderReportTable();
 
     } catch (err) {
@@ -1041,27 +1001,74 @@ function renderReportTable() {
 
     if (currentReportMode === 'sales') {
         // --- RENDER SALES (INDIVIDUAL INVOICES) ---
+        let totalSales = 0;
         rawServerSales.forEach(s => {
             const balColor = (s.total - s.paid) > 0.01 ? 'text-danger fw-bold' : 'text-success';
+            totalSales += (s.total || 0);
             tbody.innerHTML += `<tr>
                 <td>${s.date}</td>
                 <td><strong>☁️ ${s.invoiceNo}</strong></td>
                 <td>${s.client}</td>
                 <td class="text-end text-dark">${(s.total || 0).toFixed(2)}</td>
                 <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
-                <td class="text-end text-warning text-dark">0.00</td>
-                <td class="text-end ${balColor}">${(s.total - s.paid).toFixed(2)}</td>
+                <td class="text-end text-warning text-dark">${(s.returns || 0).toFixed(2)}</td>
+                <td class="text-end ${balColor}">${((s.total || 0) - (s.paid || 0)).toFixed(2)}</td>
             </tr>`;
         });
+        document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
     } else {
         // --- RENDER BALANCES (GROUPED BY CLIENT) ---
-        const grouped = window.currentGroupedData || {};
+        const grouped = {};
+        function ensureClient(c) {
+            const key = c || 'Unknown';
+            if (!grouped[key]) {
+                grouped[key] = {
+                    invoices: 0,
+                    total: 0,
+                    paid: 0,
+                    returns: 0,
+                    opening: rawServerOpening[key.trim().toLowerCase()] || 0,
+                    balance: 0
+                };
+            }
+            return key;
+        }
+
+        rawServerSales.forEach(s => {
+            const c = ensureClient(s.client);
+            grouped[c].invoices += 1;
+            grouped[c].total += (s.total || 0);
+            grouped[c].paid += (s.paid || 0);
+        });
+
+        rawServerPayments.forEach(p => {
+            const c = ensureClient(p.client);
+            grouped[c].paid += p.amount;
+        });
+
+        rawServerReturns.forEach(r => {
+            const c = ensureClient(r.client);
+            grouped[c].returns += r.amount;
+        });
+
+        let totalSales = 0, totalBalance = 0;
+
+        Object.keys(grouped).forEach(c => {
+            grouped[c].balance = grouped[c].opening + grouped[c].total - grouped[c].paid - grouped[c].returns;
+            totalSales += grouped[c].total;
+            totalBalance += grouped[c].balance;
+        });
+
+        document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
+        document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
+        document.getElementById('reportSummary').style.display = 'flex';
+
         const sortedClients = Object.keys(grouped).sort((a, b) => grouped[b].balance - grouped[a].balance);
 
         sortedClients.forEach(client => {
             const g = grouped[client];
             const balColor = g.balance > 0.01 ? 'text-danger fw-bold' : 'text-success';
-            
+
             tbody.innerHTML += `<tr>
                 <td><strong>☁️ ${client}</strong></td>
                 <td class="text-center">${g.invoices}</td>
