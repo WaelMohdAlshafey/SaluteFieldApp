@@ -97,7 +97,7 @@ async function syncNow() {
         const data = await resp.json();
 
         localStorage.setItem('salute_data_v2', JSON.stringify(data));
-        loadData(data); // This updates the UI
+        loadData(data); 
 
         if (currentRep) {
             await refreshRepScope();
@@ -256,7 +256,6 @@ async function showApp() {
     document.getElementById('bottomBar').style.display = 'flex';
     document.getElementById('lblRepName').innerText = currentRep.name;
     
-    // Ensure discount UI updates upon login
     updateDiscountUI(); 
 
     savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
@@ -641,6 +640,7 @@ async function loadPaymentInvoices() {
     const invSelect = document.getElementById('payInvoiceSelect');
     
     invSelect.innerHTML = '<option value="">-- Loading Invoices... --</option>';
+    document.getElementById('payAmount').value = 0; // Reset amount
 
     if (!clientName) {
         invSelect.innerHTML = '<option value="">-- Select Client first --</option>';
@@ -686,6 +686,38 @@ async function loadPaymentInvoices() {
     allClientInvoices.forEach((inv) => {
         invSelect.innerHTML += `<option value="${inv.invoiceNumber}" data-total="${inv.total}">${inv.invoiceNumber} · ${inv.date} · ${inv.total.toFixed(2)}</option>`;
     });
+}
+
+function calculateRemainingPayment() {
+    const invSelect = document.getElementById('payInvoiceSelect');
+    const invNo = invSelect.value;
+    const amountInput = document.getElementById('payAmount');
+
+    if (!invNo) {
+        amountInput.value = 0;
+        return;
+    }
+
+    const invTotal = parseFloat(invSelect.options[invSelect.selectedIndex].getAttribute('data-total')) || 0;
+    
+    // Find local returns for this invoice
+    let totalReturns = 0;
+    savedTx.filter(t => t.type === 'Return' && t.originalInvoiceNo === invNo).forEach(r => {
+        totalReturns += r.total;
+    });
+
+    // Find local payments for this invoice
+    let totalPaid = 0;
+    savedTx.filter(t => t.type === 'Payment' && t.originalInvoiceNo === invNo).forEach(p => {
+        totalPaid += p.total;
+    });
+
+    // Calculate
+    let remaining = invTotal - totalReturns - totalPaid;
+    if (remaining < 0) remaining = 0;
+
+    // Auto-fill the amount field so the user doesn't have to type it (but can still override)
+    amountInput.value = remaining.toFixed(2);
 }
 
 function savePayment() {
