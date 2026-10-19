@@ -75,7 +75,7 @@
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button></li>
             
-            <!-- NEW STATEMENT TAB -->
+            <!-- STATEMENT TAB -->
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statement" type="button">Statement</button></li>
             
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports" type="button" onclick="loadMyReports()">Reports</button></li>
@@ -168,7 +168,7 @@
 
                         <div class="d-flex gap-2">
                             <button class="btn btn-danger w-25 fw-bold shadow-sm" onclick="clearCurrentRet(false)">🗑️</button>
-                            <button class="btn btn-warning w-75 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save Return</button>
+                            <button class="btn btn-warning w-75 fw-bold py-2 shadow-sm text-dark" onclick="saveReturn()">💾 Save Return (Local)</button>
                         </div>
                     </div>
                 </div>
@@ -200,7 +200,7 @@
                         <div class="row g-2 align-items-end mb-2">
                             <div class="col-12"><label class="form-label">Amount to Pay</label><input type="number" id="payAmount" class="form-control form-control-sm" value="0"></div>
                         </div>
-                        <button class="btn btn-info w-100 fw-bold py-2 shadow-sm text-white" onclick="savePayment()">💾 Save Payment</button>
+                        <button class="btn btn-info w-100 fw-bold py-2 shadow-sm text-white" onclick="savePayment()">💾 Save Payment (Local)</button>
                     </div>
                 </div>
             </div>
@@ -298,8 +298,11 @@
         </div>
 
         <div class="card mt-3">
-            <div class="card-header bg-dark text-white py-1 fw-bold">Saved Transactions Today</div>
-            <div class="table-responsive" style="max-height: 200px;">
+            <div class="card-header bg-dark text-white py-1 fw-bold d-flex justify-content-between align-items-center">
+                <span>Saved Transactions (Pending Export)</span>
+                <span class="badge bg-warning text-dark" style="font-size:10px">Delete any mistake before Export</span>
+            </div>
+            <div class="table-responsive" style="max-height: 250px;">
                 <table class="table table-sm table-striped mb-0">
                     <thead><tr><th>Type</th><th>Inv#</th><th>Client</th><th>Total</th><th></th></tr></thead>
                     <tbody id="savedLines"></tbody>
