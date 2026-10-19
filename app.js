@@ -176,7 +176,6 @@ window.addEventListener('offline', () => {
 function updateDiscountUI() {
     const methodStr = discountMethod || "Sequential";
     
-    // 1. Top header badge
     const topBadge = document.getElementById('topDiscountBadge');
     if (topBadge) {
         topBadge.innerText = "Method: " + methodStr;
@@ -185,7 +184,6 @@ function updateDiscountUI() {
             : "badge bg-info text-dark";
     }
 
-    // 2. Big banner in Sales tab
     const bannerSpan = document.getElementById('bannerDiscountMethod');
     const bannerDiv = document.getElementById('divDiscountMethod');
     if (bannerSpan) {
@@ -930,89 +928,64 @@ function renderInvoiceStatement() {
 }
 
 // ============================================================
-// REPORTS & HISTORY
+// REPORTS (SERVER ONLY - STRICT)
 // ============================================================
 async function loadMyReports() {
     const tbody = document.getElementById('reportLines');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading Server Data...</td></tr>';
     document.getElementById('reportSummary').style.display = 'none';
 
-    let combinedData = [];
-
-    // 1. Fetch Server Data
-    if (navigator.onLine && currentRep) {
-        try {
-            const response = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`);
-            if (response.ok) {
-                const data = await response.json();
-                (data.sales || []).forEach(s => {
-                    combinedData.push({
-                        date: s.date, invoiceNo: s.invoiceNo, client: s.client, 
-                        total: s.total, paid: s.paid, balance: s.balance, 
-                        isLocal: false
-                    });
-                });
-            }
-        } catch (e) { console.warn("Server fetch failed"); }
-    }
-
-    // 2. Add Local Data
-    const localSales = savedTx.filter(t => t.type === 'Sale');
-    localSales.forEach(s => {
-        // Check if this local sale already exists in server data (unlikely, but just in case)
-        if (!combinedData.find(c => c.invoiceNo === s.invoiceNo)) {
-            // Calculate local balance
-            let localReturns = 0;
-            let localPayments = 0;
-            
-            savedTx.filter(t => t.type === 'Return' && t.originalInvoiceNo === s.invoiceNo).forEach(r => localReturns += r.total);
-            savedTx.filter(t => t.type === 'Payment' && t.originalInvoiceNo === s.invoiceNo).forEach(p => localPayments += p.total);
-
-            let bal = s.total - (s.paid || 0) - localReturns - localPayments;
-
-            combinedData.push({
-                date: s.date, invoiceNo: s.invoiceNo, client: s.client,
-                total: s.total, paid: (s.paid || 0) + localPayments, balance: bal, isLocal: true
-            });
-        }
-    });
-
-    // Sort by date descending
-    combinedData.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    if (combinedData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No invoices found.</td></tr>';
+    // 1. Force Online Check
+    if (!navigator.onLine) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">You must be online to view Server Reports.</td></tr>';
         return;
     }
 
-    // --- CALCULATE SUMMARY TOTALS ---
-    let totalSales = 0;
-    let totalPaid = 0;
-    let totalBalance = 0;
+    try {
+        // 2. Fetch strictly from Server
+        const response = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`);
+        if (!response.ok) throw new Error("Failed to fetch");
 
-    combinedData.forEach(s => {
-        totalSales += (s.total || 0);
-        totalPaid += (s.paid || 0);
-        totalBalance += (s.balance || 0);
-    });
+        const data = await response.json();
+        const serverSales = data.sales || [];
 
-    document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
-    document.getElementById('repTotalPaid').innerText = totalPaid.toFixed(2);
-    document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
-    document.getElementById('reportSummary').style.display = 'flex';
+        // 3. Handle Empty Server
+        if (serverSales.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No invoices found on the server for this user.</td></tr>';
+            return;
+        }
 
-    // --- RENDER TABLE ---
-    tbody.innerHTML = '';
-    combinedData.forEach(s => {
-        const badge = s.isLocal ? '📱' : '☁️';
-        tbody.innerHTML += `<tr>
-            <td>${s.date}</td>
-            <td><strong>${badge} ${s.invoiceNo}</strong><br><small class="text-muted">${s.client}</small></td>
-            <td class="text-end fw-bold">${(s.total || 0).toFixed(2)}</td>
-            <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
-            <td class="text-end text-danger">${(s.balance || 0).toFixed(2)}</td>
-        </tr>`;
-    });
+        // 4. Calculate Summary Cards strictly from Server Data
+        let totalSales = 0;
+        let totalPaid = 0;
+        let totalBalance = 0;
+
+        serverSales.forEach(s => {
+            totalSales += (s.total || 0);
+            totalPaid += (s.paid || 0);
+            totalBalance += (s.balance || 0);
+        });
+
+        document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
+        document.getElementById('repTotalPaid').innerText = totalPaid.toFixed(2);
+        document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
+        document.getElementById('reportSummary').style.display = 'flex';
+
+        // 5. Render Table strictly from Server Data
+        tbody.innerHTML = '';
+        serverSales.forEach(s => {
+            tbody.innerHTML += `<tr>
+                <td>${s.date}</td>
+                <td><strong>☁️ ${s.invoiceNo}</strong><br><small class="text-muted">${s.client}</small></td>
+                <td class="text-end fw-bold">${(s.total || 0).toFixed(2)}</td>
+                <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
+                <td class="text-end text-danger">${(s.balance || 0).toFixed(2)}</td>
+            </tr>`;
+        });
+
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading server reports. Please check connection.</td></tr>';
+    }
 }
 
 async function downloadHistory() {
