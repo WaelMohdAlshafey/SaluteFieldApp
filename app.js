@@ -582,45 +582,114 @@ async function saveReturn() {
 // ============================================================
 // PAYMENTS
 // ============================================================
+async function loadPaymentInvoices() {
+    const clientSel = document.getElementById('payClient');
+    const clientName = clientSel.value;
+    const invSelect = document.getElementById('payInvoiceSelect');
+    
+    invSelect.innerHTML = '<option value="">-- Loading Invoices... --</option>';
+
+    if (!clientName) {
+        invSelect.innerHTML = '<option value="">-- Select Client first --</option>';
+        return;
+    }
+
+    const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
+    let serverInvoices = [];
+    
+    if (navigator.onLine) {
+        try {
+            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientInvoices?clientId=${clientId}`);
+            if (resp.ok) serverInvoices = await resp.json();
+        } catch(e) {}
+    }
+
+    let allClientInvoices = [...serverInvoices];
+
+    // Local Saved Sales
+    const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
+    localSales.forEach(ls => {
+        if (!allClientInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
+            allClientInvoices.push({
+                id: 'local_' + ls.invoiceNo, invoiceNumber: ls.invoiceNo, date: ls.date, total: ls.total, isLocal: true
+            });
+        }
+    });
+
+    // Historical Cached Invoices
+    const histSales = historicalInvoices.filter(h => h.clientName === clientName);
+    histSales.forEach(hs => {
+        if (!allClientInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
+            allClientInvoices.push(hs);
+        }
+    });
+
+    if (allClientInvoices.length === 0) {
+        invSelect.innerHTML = '<option value="">-- No invoices found --</option>';
+        return;
+    }
+
+    invSelect.innerHTML = '<option value="">-- Select Invoice --</option>';
+    allClientInvoices.forEach((inv) => {
+        invSelect.innerHTML += `<option value="${inv.invoiceNumber}" data-total="${inv.total}">${inv.invoiceNumber} · ${inv.date} · ${inv.total.toFixed(2)}</option>`;
+    });
+}
+
 async function savePayment() {
-    const inv = document.getElementById('payInvoice').value.trim();
+    const invSelect = document.getElementById('payInvoiceSelect');
+    const inv = invSelect.value; // This is the invoice number now
     const clientSel = document.getElementById('payClient');
     const amount = parseFloat(document.getElementById('payAmount').value);
-    if (!inv || !clientSel.value || !amount || amount <= 0) return alert("Fill all fields with a positive amount.");
+    
+    if (!inv || !clientSel.value || !amount || amount <= 0) {
+        return alert("Select an invoice and enter a positive amount.");
+    }
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const clientId = parseInt(cOpt.getAttribute('data-id')) || 0;
+    
+    // Get total from the selected option just for record keeping in Excel
+    const invTotal = parseFloat(invSelect.options[invSelect.selectedIndex].getAttribute('data-total')) || 0;
 
     if (navigator.onLine && clientId > 0) {
         try {
             const payload = {
                 clientId: clientId, paymentDate: document.getElementById('payDate').value,
-                amount: amount, receiptNumber: inv, repName: currentRep.name
+                amount: amount, receiptNumber: document.getElementById('payInvoice').value.trim() || inv, 
+                repName: currentRep.name
             };
             const resp = await fetch('https://saluteonline.runasp.net/api/MobileData/CreatePayment', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (resp.ok) {
                 alert("Payment saved to Database!");
-                document.getElementById('payAmount').value = 0;
-                document.getElementById('payInvoice').value = '';
-                document.getElementById('payClient').value = '';
+                clearPaymentForm();
                 return;
             }
         } catch (e) {}
     }
 
     savedTx.push({
-        type: 'Payment', invoiceNo: inv, date: document.getElementById('payDate').value,
+        type: 'Payment', 
+        invoiceNo: document.getElementById('payInvoice').value.trim() || ('PAY-' + inv), 
+        originalInvoiceNo: inv,
+        invoiceTotal: invTotal,
+        date: document.getElementById('payDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
-        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'), total: amount, lines: []
+        governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'), 
+        total: amount, lines: []
     });
 
+    clearPaymentForm();
+    saveAndRender();
+    alert("Payment saved locally (Offline Mode).");
+}
+
+function clearPaymentForm() {
     document.getElementById('payAmount').value = 0;
     document.getElementById('payInvoice').value = '';
     document.getElementById('payClient').value = '';
-    saveAndRender();
-    alert("Payment saved locally (Offline Mode).");
+    document.getElementById('payInvoiceSelect').innerHTML = '<option value="">-- Select Client first --</option>';
 }
 
 // ============================================================
@@ -671,7 +740,7 @@ async function downloadHistory() {
         historicalInvoices = data;
         localStorage.setItem('salute_historical_invoices', JSON.stringify(data));
         
-        alert(`Successfully downloaded ${data.length} historical invoices for offline Returns!`);
+        alert(`Successfully downloaded ${data.length} historical invoices for offline Returns & Payments!`);
     } catch (e) {
         alert("Failed to download history. Check your connection.");
     } finally {
@@ -717,16 +786,43 @@ function exportExcel() {
         const quarter = "Q" + Math.ceil((month + 1) / 3);
 
         if (isPay) {
+            // Fully populate the 32 columns for Payment exactly as requested
             excelData.push({
-                "qurter": quarter, "code": "MISC", "movement": 0, "date": t.date, "transaction": "Payment",
-                "product": "Payment on Account", "quntity": 0, "price": 0, "discount": "0%", "netprice": 0,
-                "arabicname": t.clientAr, "invoiceno": t.invoiceNo, "client": t.client, "discription": "Mobile App",
-                "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": 0, "docno": t.invoiceNo,
-                "paymentmethod": "Cash", "returns": 0, "collected": t.total, "requestedamount": 0,
-                "totalofreturn": 0, "returnsprice": 0, "return": 0, "pricecode": "MISC", "sales": 0,
-                "governorate": t.governorate, "region": t.region, "salesnet": 0, "costnet": 0,
-                "month": new Date(t.date).toLocaleString('default', { month: 'long' }), "aginglimit": 30,
-                "initiateddate": t.date, "quarter": quarter
+                "qurter": quarter, 
+                "code": "MISC", 
+                "movement": 0, 
+                "date": t.date, 
+                "transaction": "Payment",
+                "product": "Payment on Account", 
+                "quntity": 0, 
+                "price": 0, 
+                "discount": "0%", 
+                "netprice": 0,
+                "arabicname": t.clientAr, 
+                "invoiceno": t.originalInvoiceNo, // Links to the specific invoice
+                "client": t.client, 
+                "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
+                "super visor": currentRep.supervisor, 
+                "sales rep": currentRep.name, 
+                "cost": 0, 
+                "docno": t.invoiceNo, // Receipt number
+                "paymentmethod": "Cash", 
+                "returns": 0, 
+                "collected": t.total, // The actual payment amount
+                "requestedamount": t.invoiceTotal || 0, // Total of the original invoice
+                "totalofreturn": 0, 
+                "returnsprice": 0, 
+                "return": 0, 
+                "pricecode": "MISC", 
+                "sales": 0,
+                "governorate": t.governorate, 
+                "region": t.region, 
+                "salesnet": 0, 
+                "costnet": 0,
+                "month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
+                "aginglimit": 30,
+                "initiateddate": t.date, 
+                "quarter": quarter
             });
         } else {
             t.lines.forEach(line => {
