@@ -66,6 +66,7 @@
         <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success">👤 <span id="lblRepName"></span></span>
             <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-info text-dark" id="lblDiscountMethod" style="font-size:10px;">Method: --</span>
                 <label class="form-check-label small mb-0" title="Uncheck to only see clients you already sold to">
                     <input type="checkbox" id="showAllClients" class="form-check-input" onchange="refreshClientDropdowns()">
                     Show all clients
@@ -348,7 +349,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-<!-- Notice the ?v=2 at the end of app.js to force browser cache refresh -->
-<script src="app.js?v=2"></script>
+<!-- Notice the ?v=3 at the end of app.js to force browser cache refresh -->
+<script src="app.js?v=3"></script>
 </body>
 </html>
