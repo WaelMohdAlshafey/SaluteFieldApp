@@ -23,7 +23,6 @@
         #connectionStatus { font-size: 11px; }
         #syncIntervalSelect { background-color: rgba(255,255,255,0.9); color: #0d6efd; border: none; font-size: 10px; font-weight: bold; padding: 2px 4px; border-radius: 4px; height: 22px; }
         
-        /* Mobile-optimized table for current invoice */
         .invoice-table { font-size: 11px; width: 100%; margin-bottom: 0; }
         .invoice-table th { padding: 2px; }
         .invoice-table td { padding: 4px 2px; }
@@ -66,7 +65,6 @@
         <div class="mb-2 d-flex justify-content-between align-items-center">
             <span class="fw-bold text-success">👤 <span id="lblRepName"></span></span>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-info text-dark" id="lblDiscountMethod" style="font-size:10px;">Method: --</span>
                 <label class="form-check-label small mb-0" title="Uncheck to only see clients you already sold to">
                     <input type="checkbox" id="showAllClients" class="form-check-input" onchange="refreshClientDropdowns()">
                     Show all clients
@@ -80,9 +78,7 @@
             <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#sales" type="button">Sales</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#returns" type="button">Returns</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button">Payments</button></li>
-            
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statement" type="button">Statement</button></li>
-            
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports" type="button" onclick="loadMyReports()">Reports</button></li>
         </ul>
 
@@ -91,6 +87,11 @@
             <div class="tab-pane fade show active" id="sales" role="tabpanel">
                 <div class="card">
                     <div class="card-body p-2">
+                        <!-- NEW VISIBLE BANNER FOR DISCOUNT METHOD -->
+                        <div class="alert alert-info py-1 mb-2 text-center" style="font-size:12px; font-weight:bold; border-radius: 5px;" id="divDiscountMethod">
+                            Discount Calculation: <span id="lblDiscountMethod">Sequential (Compound)</span>
+                        </div>
+
                         <div class="row g-2 mb-2">
                             <div class="col-6"><label class="form-label">Invoice #</label><input type="text" id="saleInvoice" class="form-control form-control-sm"></div>
                             <div class="col-6"><label class="form-label">Date</label><input type="date" id="saleDate" class="form-control form-control-sm"></div>
@@ -349,7 +350,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-<!-- Notice the ?v=3 at the end of app.js to force browser cache refresh -->
-<script src="app.js?v=3"></script>
+<!-- Notice the ?v=4 to force cache refresh -->
+<script src="app.js?v=4"></script>
 </body>
 </html>
