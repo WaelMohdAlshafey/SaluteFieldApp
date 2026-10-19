@@ -13,6 +13,7 @@ let currentRet = { lines: [], total: 0 };
 let currentRep = null;
 let allInvoices = []; 
 let historicalInvoices = []; 
+let currentStatementData = { invoices: [], payments: [], returns: [] };
 
 let repScopeClients = new Set();
 let lastSyncTime = 0;
@@ -248,7 +249,7 @@ function refreshClientDropdowns() {
         `<option value="${c.name}" data-id="${c.id || ''}" data-code="${c.code}" data-ar="${c.arabicName || ''}" data-area="${c.areaName || ''}" data-city="${c.cityName || ''}">${c.name}</option>`
     ).join('');
 
-    ['saleClient', 'retClient', 'payClient'].forEach(id => {
+    ['saleClient', 'retClient', 'payClient', 'stmtClient'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = clientHtml;
     });
@@ -606,7 +607,6 @@ async function loadPaymentInvoices() {
 
     let allClientInvoices = [...serverInvoices];
 
-    // Local Saved Sales
     const localSales = savedTx.filter(t => t.type === 'Sale' && t.client === clientName);
     localSales.forEach(ls => {
         if (!allClientInvoices.find(si => si.invoiceNumber === ls.invoiceNo)) {
@@ -616,7 +616,6 @@ async function loadPaymentInvoices() {
         }
     });
 
-    // Historical Cached Invoices
     const histSales = historicalInvoices.filter(h => h.clientName === clientName);
     histSales.forEach(hs => {
         if (!allClientInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
@@ -692,106 +691,176 @@ function clearPaymentForm() {
 }
 
 // ============================================================
-// NEW: COMBINED INVOICES (SERVER + LOCAL)
+// STATEMENT (SERVER + LOCAL MERGED)
 // ============================================================
-async function loadCombinedInvoices() {
-    const tbody = document.getElementById('combinedInvoiceLines');
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
+async function loadStatementClient() {
+    const clientSel = document.getElementById('stmtClient');
+    if (!clientSel || !clientSel.value) return;
+    
+    const clientName = clientSel.value;
+    const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
+    
+    const invSelect = document.getElementById('stmtInvoice');
+    invSelect.innerHTML = '<option value="">-- Loading --</option>';
+    document.getElementById('stmtDetails').style.display = 'none';
 
-    let combined = [];
-
-    // 1. Fetch Server Invoices (Last 100 for this rep)
-    if (navigator.onLine && currentRep) {
+    let serverData = { invoices: [], payments: [], returns: [] };
+    if (navigator.onLine && clientId) {
         try {
-            const response = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`);
-            if (response.ok) {
-                const data = await response.json();
-                (data.sales || []).forEach(s => {
-                    combined.push({
-                        date: s.date, invoiceNo: s.invoiceNo, client: s.client, 
-                        total: s.total, paid: s.paid, balance: s.balance, 
-                        source: 'Server'
-                    });
-                });
-            }
-        } catch (e) { console.warn("Could not load server invoices"); }
+            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientStatement?clientId=${clientId}`);
+            if (resp.ok) serverData = await resp.json();
+        } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
 
-    // 2. Process Local Transactions to adjust balances
-    const localInvoicesMap = {}; // Key: InvoiceNo, Value: Object
+    // Local Data
+    const localInvoices = savedTx.filter(t => t.type === 'Sale' && t.client === clientName).map(s => ({
+        id: 'local_' + s.invoiceNo,
+        invoiceNumber: s.invoiceNo,
+        date: s.date,
+        total: s.total,
+        amountPaid: s.paid || 0,
+        lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.price, total: l.netPrice })),
+        isLocal: true
+    }));
 
-    // 2a. Add Local Sales
-    savedTx.filter(t => t.type === 'Sale').forEach(s => {
-        localInvoicesMap[s.invoiceNo] = {
-            date: s.date, invoiceNo: s.invoiceNo, client: s.client,
-            total: s.total, paid: s.paid, returns: 0,
-            source: 'Local'
-        };
-    });
+    const localPayments = savedTx.filter(t => t.type === 'Payment' && t.client === clientName).map(p => ({
+        id: 'local_' + p.invoiceNo,
+        reference: p.originalInvoiceNo,
+        date: p.date,
+        amount: p.total,
+        isLocal: true
+    }));
 
-    // 2b. Apply Local Payments
-    savedTx.filter(t => t.type === 'Payment').forEach(p => {
-        const invNo = p.originalInvoiceNo;
-        if (localInvoicesMap[invNo]) {
-            localInvoicesMap[invNo].paid += p.total; // Local sale + local payment
-        } else {
-            // Payment against a server invoice -> find it in combined and update it
-            const serverInv = combined.find(c => c.invoiceNo === invNo);
-            if (serverInv) {
-                serverInv.paid += p.total;
-                serverInv.balance = serverInv.total - serverInv.paid;
-                // If a local payment was made against a server invoice, we can optionally mark the source as "Mixed" or keep it "Server"
-                if (serverInv.balance < 0) serverInv.balance = 0;
-            }
-        }
-    });
+    const localReturns = savedTx.filter(t => t.type === 'Return' && t.client === clientName).map(r => ({
+        id: 'local_' + r.invoiceNo,
+        originalInvoiceNo: r.originalInvoiceNo,
+        returnNumber: r.invoiceNo,
+        date: r.date,
+        amount: r.total,
+        isLocal: true
+    }));
 
-    // 2c. Apply Local Returns
-    savedTx.filter(t => t.type === 'Return').forEach(r => {
-        const invNo = r.originalInvoiceNo;
-        if (localInvoicesMap[invNo]) {
-            localInvoicesMap[invNo].returns += r.total;
-        } else {
-            const serverInv = combined.find(c => c.invoiceNo === invNo);
-            if (serverInv) {
-                // Reduce the total of the server invoice by the return amount
-                serverInv.total -= r.total;
-                serverInv.balance = serverInv.total - serverInv.paid;
-            }
-        }
-    });
+    // Merge all data
+    currentStatementData = {
+        invoices: [...(serverData.invoices || []), ...localInvoices],
+        payments: [...(serverData.payments || []), ...localPayments],
+        returns: [...(serverData.returns || []), ...localReturns]
+    };
 
-    // 3. Finalize Local Invoices
-    Object.values(localInvoicesMap).forEach(localInv => {
-        localInv.balance = localInv.total - localInv.paid - localInv.returns;
-        combined.push(localInv);
-    });
+    // Sort invoices by date descending
+    currentStatementData.invoices.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-    // 4. Sort by Date (newest first) and Render
-    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    if (combined.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No invoices found.</td></tr>';
+    if (currentStatementData.invoices.length === 0) {
+        invSelect.innerHTML = '<option value="">-- No invoices found --</option>';
         return;
     }
 
-    tbody.innerHTML = '';
-    combined.forEach(c => {
-        const badge = c.source === 'Server' 
-            ? '<span class="badge bg-success" style="font-size:9px">☁️ Server</span>' 
-            : '<span class="badge bg-warning text-dark" style="font-size:9px">📱 Local</span>';
-            
-        const balColor = c.balance > 0 ? 'text-danger fw-bold' : 'text-success';
+    invSelect.innerHTML = '<option value="">-- Select Invoice --</option>';
+    currentStatementData.invoices.forEach((inv, idx) => {
+        const badge = inv.isLocal ? '📱' : '☁️';
+        invSelect.innerHTML += `<option value="${idx}">${badge} ${inv.invoiceNumber} · ${inv.date} · ${inv.total.toFixed(2)}</option>`;
+    });
+}
 
-        tbody.innerHTML += `<tr>
-            <td>${c.date}</td>
-            <td><strong>${c.invoiceNo}</strong></td>
-            <td>${c.client}</td>
-            <td class="text-end">${c.total.toFixed(2)}</td>
-            <td class="text-end ${balColor}">${c.balance.toFixed(2)}</td>
-            <td>${badge}</td>
+function renderInvoiceStatement() {
+    const invIdx = document.getElementById('stmtInvoice').value;
+    if (invIdx === '') {
+        document.getElementById('stmtDetails').style.display = 'none';
+        return;
+    }
+
+    const inv = currentStatementData.invoices[parseInt(invIdx)];
+    if (!inv) return;
+
+    document.getElementById('stmtDetails').style.display = 'block';
+
+    // Header
+    document.getElementById('stmtInvNo').innerText = inv.invoiceNumber;
+    document.getElementById('stmtInvDate').innerText = inv.date;
+    
+    const sourceBadge = inv.isLocal 
+        ? '<span class="badge bg-warning text-dark">📱 Local (Unsynced)</span>' 
+        : '<span class="badge bg-success">☁️ Server</span>';
+    document.getElementById('stmtInvSource').innerHTML = sourceBadge;
+
+    // Lines
+    const linesTbody = document.getElementById('stmtInvLines');
+    linesTbody.innerHTML = '';
+    inv.lines.forEach(l => {
+        linesTbody.innerHTML += `<tr>
+            <td>${l.productName}</td>
+            <td class="text-end">${l.qty}</td>
+            <td class="text-end">${l.price.toFixed(2)}</td>
+            <td class="text-end">${l.total.toFixed(2)}</td>
+            <td>${inv.isLocal ? '📱' : '☁️'}</td>
         </tr>`;
     });
+
+    // Payments
+    const invPayments = currentStatementData.payments.filter(p => 
+        p.reference && p.reference.includes(inv.invoiceNumber)
+    );
+    const payTbody = document.getElementById('stmtInvPayments');
+    payTbody.innerHTML = '';
+    
+    let totalPaid = inv.amountPaid || 0;
+    let hasInitialPayment = totalPaid > 0;
+
+    if (hasInitialPayment) {
+        payTbody.innerHTML += `<tr>
+            <td>${inv.date}</td>
+            <td>Payment at Invoice</td>
+            <td class="text-end text-success">${totalPaid.toFixed(2)}</td>
+            <td>${inv.isLocal ? '📱' : '☁️'}</td>
+        </tr>`;
+    }
+
+    invPayments.forEach(p => {
+        payTbody.innerHTML += `<tr>
+            <td>${p.date}</td>
+            <td>${p.reference || 'N/A'}</td>
+            <td class="text-end text-success">${p.amount.toFixed(2)}</td>
+            <td>${p.isLocal ? '📱' : '☁️'}</td>
+        </tr>`;
+        totalPaid += p.amount;
+    });
+
+    if (!hasInitialPayment && invPayments.length === 0) {
+        payTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Payments</td></tr>';
+    }
+
+    // Returns
+    const invReturns = currentStatementData.returns.filter(r => 
+        r.originalInvoiceNo === inv.invoiceNumber
+    );
+    const retTbody = document.getElementById('stmtInvReturns');
+    retTbody.innerHTML = '';
+    let totalReturns = 0;
+    invReturns.forEach(r => {
+        retTbody.innerHTML += `<tr>
+            <td>${r.date}</td>
+            <td>${r.returnNumber}</td>
+            <td class="text-end text-danger">${r.amount.toFixed(2)}</td>
+            <td>${r.isLocal ? '📱' : '☁️'}</td>
+        </tr>`;
+        totalReturns += r.amount;
+    });
+    if (invReturns.length === 0) {
+        retTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Returns</td></tr>';
+    }
+
+    // Grand Totals
+    const balance = inv.total - totalPaid - totalReturns;
+    
+    document.getElementById('stmtInvTotal').innerText = inv.total.toFixed(2);
+    
+    const balEl = document.getElementById('stmtInvBalance');
+    balEl.innerText = balance.toFixed(2);
+    if (balance > 0) {
+        balEl.className = 'fw-bold text-danger';
+    } else {
+        balEl.className = 'fw-bold text-success';
+    }
 }
 
 // ============================================================
