@@ -15,6 +15,10 @@ let allInvoices = [];
 let historicalInvoices = []; 
 let currentStatementData = { invoices: [], payments: [], returns: [] };
 
+// NEW: Report Mode Toggle
+let currentReportMode = 'sales'; 
+let rawServerSales = []; // Holds the data to switch modes without refetching
+
 let repScopeClients = new Set();
 let lastSyncTime = 0;
 let syncIntervalMs = 15 * 60 * 1000;
@@ -45,6 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     lastSyncTime = parseInt(localStorage.getItem('salute_last_sync') || '0');
     updateSyncBadge();
     loadSyncInterval();
+    switchReportMode('sales'); // Initialize table headers
 
     await syncNow();
 
@@ -912,18 +917,53 @@ function renderInvoiceStatement() {
 }
 
 // ============================================================
-// BALANCES REPORT (SERVER ONLY - GROUPED BY CLIENT)
+// REPORTS (SALES + BALANCES TOGGLE)
 // ============================================================
+function switchReportMode(mode) {
+    currentReportMode = mode;
+    const thead = document.getElementById('reportTableHead');
+    
+    if (mode === 'sales') {
+        thead.innerHTML = `
+            <tr>
+                <th>Date</th>
+                <th>Invoice</th>
+                <th>Client</th>
+                <th class="text-end">Total</th>
+                <th class="text-end">Paid</th>
+                <th class="text-end">Returns</th>
+                <th class="text-end" style="color: #dc3545;">Balance</th>
+            </tr>`;
+        document.getElementById('lblCard1').innerText = 'Total Sales';
+        document.getElementById('lblCard2').innerText = 'Total Balance';
+    } else {
+        thead.innerHTML = `
+            <tr>
+                <th>Client</th>
+                <th class="text-center">Invoices</th>
+                <th class="text-end">Total Billed</th>
+                <th class="text-end">Collected</th>
+                <th class="text-end">Returns</th>
+                <th class="text-end" style="color: #dc3545;">Balance</th>
+            </tr>`;
+        document.getElementById('lblCard1').innerText = 'Total Billed';
+        document.getElementById('lblCard2').innerText = 'Outstanding';
+    }
+    
+    // Re-render the table using the cached server data
+    renderReportTable();
+}
+
 async function loadMyReports() {
     const tbody = document.getElementById('reportLines');
     const fromDate = document.getElementById('repFromDate').value;
     const toDate = document.getElementById('repToDate').value;
 
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</td></tr>';
     document.getElementById('reportSummary').style.display = 'none';
 
     if (!navigator.onLine) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">You must be online to view Server Reports.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">You must be online to view Server Reports.</td></tr>';
         return;
     }
 
@@ -936,45 +976,68 @@ async function loadMyReports() {
         if (!response.ok) throw new Error("Failed to fetch");
 
         const data = await response.json();
-        const serverSales = data.sales || [];
+        rawServerSales = data.sales || []; // Save to global so we can toggle without refetching
 
-        if (serverSales.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No data found on server for this period.</td></tr>';
+        if (rawServerSales.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data found on server for this period.</td></tr>';
             return;
         }
 
-        // --- GROUP BY CLIENT ---
-        const grouped = {};
+        // Calculate Summary Cards
         let totalSales = 0;
         let totalBalance = 0;
 
-        serverSales.forEach(s => {
-            const clientName = s.client || 'Unknown Client';
-            
-            if (!grouped[clientName]) {
-                grouped[clientName] = {
-                    invoices: 0, total: 0, paid: 0, balance: 0
-                };
-            }
-            
-            grouped[clientName].invoices += 1;
-            grouped[clientName].total += (s.total || 0);
-            grouped[clientName].paid += (s.paid || 0);
-            grouped[clientName].balance += (s.balance || 0);
-
+        rawServerSales.forEach(s => {
             totalSales += (s.total || 0);
             totalBalance += (s.balance || 0);
         });
 
-        // Update Summary Cards
         document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
         document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
         document.getElementById('reportSummary').style.display = 'flex';
 
-        // Render Table
-        tbody.innerHTML = '';
-        
-        // SORT BY HIGHEST BALANCE FIRST (Who owes the most)
+        // Render table based on the currently selected mode
+        renderReportTable();
+
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading server data.</td></tr>';
+    }
+}
+
+function renderReportTable() {
+    const tbody = document.getElementById('reportLines');
+    tbody.innerHTML = '';
+
+    if (currentReportMode === 'sales') {
+        // --- RENDER SALES (INDIVIDUAL INVOICES) ---
+        rawServerSales.forEach(s => {
+            const balColor = s.balance > 0.01 ? 'text-danger fw-bold' : 'text-success';
+            tbody.innerHTML += `<tr>
+                <td>${s.date}</td>
+                <td><strong>☁️ ${s.invoiceNo}</strong></td>
+                <td>${s.client}</td>
+                <td class="text-end text-dark">${(s.total || 0).toFixed(2)}</td>
+                <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
+                <td class="text-end text-warning text-dark">${(s.returns || 0).toFixed(2)}</td>
+                <td class="text-end ${balColor}">${(s.balance || 0).toFixed(2)}</td>
+            </tr>`;
+        });
+    } else {
+        // --- RENDER BALANCES (GROUPED BY CLIENT) ---
+        const grouped = {};
+        rawServerSales.forEach(s => {
+            const clientName = s.client || 'Unknown Client';
+            if (!grouped[clientName]) {
+                grouped[clientName] = { invoices: 0, total: 0, paid: 0, returns: 0, balance: 0 };
+            }
+            grouped[clientName].invoices += 1;
+            grouped[clientName].total += (s.total || 0);
+            grouped[clientName].paid += (s.paid || 0);
+            grouped[clientName].returns += (s.returns || 0);
+            grouped[clientName].balance += (s.balance || 0);
+        });
+
+        // Sort by Highest Balance
         const sortedClients = Object.keys(grouped).sort((a, b) => grouped[b].balance - grouped[a].balance);
 
         sortedClients.forEach(client => {
@@ -984,14 +1047,12 @@ async function loadMyReports() {
             tbody.innerHTML += `<tr>
                 <td><strong>☁️ ${client}</strong></td>
                 <td class="text-center">${g.invoices}</td>
-                <td class="text-end text-muted">${g.total.toFixed(2)}</td>
+                <td class="text-end text-dark">${g.total.toFixed(2)}</td>
                 <td class="text-end text-success">${g.paid.toFixed(2)}</td>
+                <td class="text-end text-warning text-dark">${g.returns.toFixed(2)}</td>
                 <td class="text-end ${balColor}">${g.balance.toFixed(2)}</td>
             </tr>`;
         });
-
-    } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading server data.</td></tr>';
     }
 }
 
