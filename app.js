@@ -15,9 +15,10 @@ let allInvoices = [];
 let historicalInvoices = []; 
 let currentStatementData = { invoices: [], payments: [], returns: [] };
 
-// NEW: Report Mode Toggle
 let currentReportMode = 'sales'; 
-let rawServerSales = []; // Holds the data to switch modes without refetching
+let rawServerSales = []; 
+let rawServerPayments = [];
+let rawServerReturns = [];
 
 let repScopeClients = new Set();
 let lastSyncTime = 0;
@@ -34,7 +35,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const today = new Date().toISOString().split('T')[0];
     document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
 
-    // Set default dates for Reports (1st of month to today)
     const firstDay = new Date();
     firstDay.setDate(1);
     if (document.getElementById('repFromDate')) document.getElementById('repFromDate').value = firstDay.toISOString().split('T')[0];
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     lastSyncTime = parseInt(localStorage.getItem('salute_last_sync') || '0');
     updateSyncBadge();
     loadSyncInterval();
-    switchReportMode('sales'); // Initialize table headers
+    switchReportMode('sales'); 
 
     await syncNow();
 
@@ -950,7 +950,6 @@ function switchReportMode(mode) {
         document.getElementById('lblCard2').innerText = 'Outstanding';
     }
     
-    // Re-render the table using the cached server data
     renderReportTable();
 }
 
@@ -976,27 +975,59 @@ async function loadMyReports() {
         if (!response.ok) throw new Error("Failed to fetch");
 
         const data = await response.json();
-        rawServerSales = data.sales || []; // Save to global so we can toggle without refetching
+        rawServerSales = data.sales || [];
+        rawServerPayments = data.payments || [];
+        rawServerReturns = data.returns || [];
 
-        if (rawServerSales.length === 0) {
+        if (rawServerSales.length === 0 && rawServerPayments.length === 0 && rawServerReturns.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data found on server for this period.</td></tr>';
             return;
         }
 
-        // Calculate Summary Cards
+        // --- CALCULATE SUMMARY TOTALS & GROUPING ---
         let totalSales = 0;
-        let totalBalance = 0;
+        let totalPaid = 0;
+        let totalReturns = 0;
+
+        const grouped = {};
+        function ensureClient(c) { if(!grouped[c]) grouped[c] = { invoices: 0, total: 0, paid: 0, returns: 0, balance: 0 }; }
 
         rawServerSales.forEach(s => {
+            const c = s.client || 'Unknown';
+            ensureClient(c);
+            grouped[c].invoices += 1;
+            grouped[c].total += (s.total || 0);
+            grouped[c].paid += (s.paid || 0); 
+            
             totalSales += (s.total || 0);
-            totalBalance += (s.balance || 0);
+            totalPaid += (s.paid || 0);
+        });
+
+        rawServerPayments.forEach(p => {
+            const c = p.client || 'Unknown';
+            ensureClient(c);
+            grouped[c].paid += p.amount;
+            totalPaid += p.amount;
+        });
+
+        rawServerReturns.forEach(r => {
+            const c = r.client || 'Unknown';
+            ensureClient(c);
+            grouped[c].returns += r.amount;
+            totalReturns += r.amount;
+        });
+
+        let totalBalance = 0;
+        Object.keys(grouped).forEach(c => {
+            grouped[c].balance = grouped[c].total - grouped[c].paid - grouped[c].returns;
+            totalBalance += grouped[c].balance;
         });
 
         document.getElementById('repTotalSales').innerText = totalSales.toFixed(2);
         document.getElementById('repTotalBalance').innerText = totalBalance.toFixed(2);
         document.getElementById('reportSummary').style.display = 'flex';
 
-        // Render table based on the currently selected mode
+        window.currentGroupedData = grouped;
         renderReportTable();
 
     } catch (err) {
@@ -1011,33 +1042,20 @@ function renderReportTable() {
     if (currentReportMode === 'sales') {
         // --- RENDER SALES (INDIVIDUAL INVOICES) ---
         rawServerSales.forEach(s => {
-            const balColor = s.balance > 0.01 ? 'text-danger fw-bold' : 'text-success';
+            const balColor = (s.total - s.paid) > 0.01 ? 'text-danger fw-bold' : 'text-success';
             tbody.innerHTML += `<tr>
                 <td>${s.date}</td>
                 <td><strong>☁️ ${s.invoiceNo}</strong></td>
                 <td>${s.client}</td>
                 <td class="text-end text-dark">${(s.total || 0).toFixed(2)}</td>
                 <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
-                <td class="text-end text-warning text-dark">${(s.returns || 0).toFixed(2)}</td>
-                <td class="text-end ${balColor}">${(s.balance || 0).toFixed(2)}</td>
+                <td class="text-end text-warning text-dark">0.00</td>
+                <td class="text-end ${balColor}">${(s.total - s.paid).toFixed(2)}</td>
             </tr>`;
         });
     } else {
         // --- RENDER BALANCES (GROUPED BY CLIENT) ---
-        const grouped = {};
-        rawServerSales.forEach(s => {
-            const clientName = s.client || 'Unknown Client';
-            if (!grouped[clientName]) {
-                grouped[clientName] = { invoices: 0, total: 0, paid: 0, returns: 0, balance: 0 };
-            }
-            grouped[clientName].invoices += 1;
-            grouped[clientName].total += (s.total || 0);
-            grouped[clientName].paid += (s.paid || 0);
-            grouped[clientName].returns += (s.returns || 0);
-            grouped[clientName].balance += (s.balance || 0);
-        });
-
-        // Sort by Highest Balance
+        const grouped = window.currentGroupedData || {};
         const sortedClients = Object.keys(grouped).sort((a, b) => grouped[b].balance - grouped[a].balance);
 
         sortedClients.forEach(client => {
