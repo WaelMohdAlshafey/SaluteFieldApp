@@ -1162,16 +1162,21 @@ function exportExcel() {
             });
         } else {
             t.lines.forEach(line => {
+                const prodName = line.productName || line.product || 'Unknown';
+                const prodCode = line.productCode || 'MISC';
+                const invRef = isRet ? t.originalInvoiceNo : t.invoiceNo;
+                const priceCode = prodName + invRef;
+
                 const unitNetPrice = line.qty > 0 ? (line.netPrice / line.qty) : line.price;
                 const lineTotalCost = line.cost * line.qty;
 
                 excelData.push({
                     "qurter": quarter, 
-                    "code": line.productCode || '', 
+                    "code": prodCode, 
                     "movement": isSale ? -line.qty : line.qty,
                     "Date": t.date, 
                     "Transaction": isSale ? "Sales" : "Returns", 
-                    "product": line.productName || line.product, 
+                    "product": prodName, 
                     "quantity": isSale ? line.qty : 0,
                     "Price": line.price, 
                     "Discount": isSale ? (line.disc + "%") : "0.00%",
@@ -1191,7 +1196,7 @@ function exportExcel() {
                     "totalof return": isRet ? line.total : 0, 
                     "returns_price": isRet ? line.price : 0,
                     "returns_value": isRet ? line.total : 0, 
-                    "price_code": line.productCode || '',
+                    "price_code": priceCode, 
                     "Sales": isSale ? line.netPrice : 0, 
                     "Governorate": t.governorate, 
                     "Region": t.region, 
