@@ -491,9 +491,13 @@ async function loadClientInvoices() {
     const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
     let serverInvoices = [];
     
-    if (navigator.onLine && clientId) {
+    if (navigator.onLine) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
+            let url = `${API_BASE}/ClientInvoices?`;
+            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
+            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            
+            const resp = await fetch(url);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -672,9 +676,13 @@ async function loadPaymentInvoices() {
     const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
     let serverInvoices = [];
     
-    if (navigator.onLine && clientId) {
+    if (navigator.onLine) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
+            let url = `${API_BASE}/ClientInvoices?`;
+            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
+            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            
+            const resp = await fetch(url);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -780,9 +788,13 @@ async function loadStatementClient() {
     document.getElementById('stmtDetails').style.display = 'none';
 
     let serverData = { invoices: [], payments: [], returns: [] };
-    if (navigator.onLine && clientId) {
+    if (navigator.onLine) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientStatement?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
+            let url = `${API_BASE}/ClientStatement?`;
+            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
+            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            
+            const resp = await fetch(url);
             if (resp.ok) serverData = await resp.json();
         } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
