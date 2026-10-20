@@ -493,7 +493,7 @@ async function loadClientInvoices() {
     
     if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -674,7 +674,7 @@ async function loadPaymentInvoices() {
     
     if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -782,7 +782,7 @@ async function loadStatementClient() {
     let serverData = { invoices: [], payments: [], returns: [] };
     if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`${API_BASE}/ClientStatement?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientStatement?clientId=${clientId}&clientName=${encodeURIComponent(clientName)}`);
             if (resp.ok) serverData = await resp.json();
         } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
@@ -949,7 +949,7 @@ function renderInvoiceStatement() {
         balance = inv.total - totalPaid - totalReturns;
         document.getElementById('stmtInvTotal').innerText = inv.total.toFixed(2);
     } else {
-        balance = totalReturns - totalPaid; // For general, it's just what they paid minus what they returned
+        balance = totalReturns - totalPaid; 
         document.getElementById('stmtInvTotal').innerText = "0.00";
     }
     
