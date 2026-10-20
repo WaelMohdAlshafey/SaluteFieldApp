@@ -435,16 +435,34 @@ function saveSaleInvoice() {
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const storeAreaCity = getStoreAreaCity(storeSel.value);
     const paidVal = parseFloat(document.getElementById('salePaid').value) || 0;
+    const payType = document.getElementById('salePayType').value;
     
+    // 1. Save the SALE Transaction
     savedTx.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
         client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
         governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
         storeId: storeSel.value, storeArea: storeAreaCity.area, storeCity: storeAreaCity.city,
-        payType: document.getElementById('salePayType').value, 
-        paid: paidVal,
+        payType: payType, 
+        paid: 0, // We force 0 here because the payment is a separate transaction
         total: currentSale.total, lines: currentSale.lines.map(l => ({ ...l }))
     });
+
+    // 2. Save the PAYMENT Transaction (If there's an initial payment)
+    if (paidVal > 0) {
+        savedTx.push({
+            type: 'Payment', 
+            invoiceNo: inv, 
+            originalInvoiceNo: inv,
+            invoiceTotal: currentSale.total,
+            date: document.getElementById('saleDate').value,
+            client: clientSel.value, clientCode: cOpt.getAttribute('data-code'), clientAr: cOpt.getAttribute('data-ar'),
+            governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'), 
+            total: paidVal, 
+            payType: payType,
+            lines: []
+        });
+    }
 
     // Reset the form directly without confirmation
     currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
@@ -774,7 +792,7 @@ async function loadStatementClient() {
         invoiceNumber: s.invoiceNo,
         date: s.date,
         total: s.total,
-        amountPaid: s.paid || 0,
+        amountPaid: 0, // Paid is handled by payment records now
         lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.price, disc: l.disc, netPrice: l.netPrice, total: l.netPrice })),
         isLocal: true
     }));
@@ -975,7 +993,7 @@ async function loadMyReports() {
         
         // --- MERGE SERVER AND LOCAL DATA ---
         const localSales = savedTx.filter(t => t.type === 'Sale').map(s => ({
-            date: s.date, invoiceNo: s.invoiceNo, client: s.client, total: s.total, paid: s.paid || 0, returns: 0, isLocal: true
+            date: s.date, invoiceNo: s.invoiceNo, client: s.client, total: s.total, paid: 0, returns: 0, isLocal: true
         }));
         const localPayments = savedTx.filter(t => t.type === 'Payment').map(p => ({
             date: p.date, client: p.client, amount: p.total, isLocal: true
@@ -1139,17 +1157,41 @@ function exportExcel() {
         const monthName = new Date(t.date).toLocaleString('default', { month: 'long' });
 
         if (isPay) {
-            // Standalone Payment
+            // Standalone Payment (Includes the initial invoice payment now)
             excelData.push({
-                "qurter": quarter, "code": "MISC", "movement": 0, "Date": t.date, "Transaction": "Payments",
-                "product": "Payment on Account", "quantity": 0, "Price": 0, "Discount": "0.00%", "netPrice": 0,
-                "Arabic_name": t.clientAr, "InvoiceNo": t.originalInvoiceNo, "Client": t.client, 
-                "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
-                "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": 0, "doc#": t.invoiceNo, 
-                "PaymentMethod": t.payType || "Cash", "returns": 0, "Paid": t.total, "requested_amount": 0, "totalof return": 0, 
-                "returns_price": 0, "returns_value": 0, "price_code": "MISC", "Sales": 0,
-                "Governorate": t.governorate, "Region": t.region, "sales_net": 0, "Cost_net": 0,
-                "Month": monthName, "AgingLimit": 90
+                "qurter": quarter, 
+                "code": t.invoiceNo, 
+                "movement": 0, 
+                "Date": t.date, 
+                "Transaction": "Payments",
+                "product": "Payment on Account", 
+                "quantity": 0, 
+                "Price": 0, 
+                "Discount": "0.00%", 
+                "netPrice": 0,
+                "Arabic_name": t.clientAr, 
+                "InvoiceNo": t.invoiceNo, 
+                "Client": t.client, 
+                "discription": `Payment against Invoice ${t.invoiceNo}`,
+                "super visor": currentRep.supervisor, 
+                "sales rep": currentRep.name, 
+                "cost": 0, 
+                "doc#": t.invoiceNo, 
+                "PaymentMethod": t.payType || "Cash", 
+                "returns": 0, 
+                "Paid": t.total, 
+                "requested_amount": 0, 
+                "totalof return": 0, 
+                "returns_price": 0, 
+                "returns_value": 0,
+                "price_code": "MISC", 
+                "Sales": 0,
+                "Governorate": t.governorate, 
+                "Region": t.region, 
+                "sales_net": 0, 
+                "Cost_net": 0,
+                "Month": monthName, 
+                "AgingLimit": 90
             });
         } else {
             // Sale or Return lines
@@ -1175,7 +1217,7 @@ function exportExcel() {
                     "discription": isSale ? "Mobile App Sale" : "Return against " + t.originalInvoiceNo,
                     "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": line.cost,
                     "doc#": t.invoiceNo, "PaymentMethod": isSale ? t.payType : "Credit", "returns": isRet ? line.qty : 0,
-                    "Paid": 0, // Paid is handled in a separate line for Sales
+                    "Paid": 0, // Paid is handled by the separate Payment transaction
                     "requested_amount": isSale ? (line.price * line.qty) : 0,
                     "totalof return": isRet ? line.total : 0, "returns_price": isRet ? line.price : 0,
                     "returns_value": isRet ? line.total : 0, "price_code": finalPriceCode, 
@@ -1184,46 +1226,6 @@ function exportExcel() {
                     "Month": monthName, "AgingLimit": 90
                 });
             });
-
-            // If it's a Sale and has a paid amount, add a SEPARATE Payment line
-            const tPaid = parseFloat(t.paid) || 0;
-            if (isSale && tPaid > 0) {
-                excelData.push({
-                    "qurter": quarter, 
-                    "code": t.invoiceNo, 
-                    "movement": 0, 
-                    "Date": t.date, 
-                    "Transaction": "Payments",
-                    "product": "Payment on Account", 
-                    "quantity": 0, 
-                    "Price": 0, 
-                    "Discount": "0.00%", 
-                    "netPrice": 0,
-                    "Arabic_name": t.clientAr, 
-                    "InvoiceNo": t.invoiceNo, 
-                    "Client": t.client, 
-                    "discription": `Payment at Invoice ${t.invoiceNo}`,
-                    "super visor": currentRep.supervisor, 
-                    "sales rep": currentRep.name, 
-                    "cost": 0, 
-                    "doc#": t.invoiceNo, 
-                    "PaymentMethod": t.payType || "Cash", 
-                    "returns": 0, 
-                    "Paid": tPaid, 
-                    "requested_amount": 0, 
-                    "totalof return": 0, 
-                    "returns_price": 0, 
-                    "returns_value": 0, 
-                    "price_code": "MISC", 
-                    "Sales": 0,
-                    "Governorate": t.governorate, 
-                    "Region": t.region, 
-                    "sales_net": 0, 
-                    "Cost_net": 0,
-                    "Month": monthName, 
-                    "AgingLimit": 90
-                });
-            }
         }
     });
 
