@@ -444,7 +444,7 @@ function saveSaleInvoice() {
         governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
         storeId: storeSel.value, storeArea: storeAreaCity.area, storeCity: storeAreaCity.city,
         payType: payType, 
-        paid: 0, // We force 0 here because the payment is a separate transaction
+        paid: 0, // Payment is a separate transaction
         total: currentSale.total, lines: currentSale.lines.map(l => ({ ...l }))
     });
 
@@ -464,7 +464,7 @@ function saveSaleInvoice() {
         });
     }
 
-    // Reset the form directly without confirmation
+    // Reset the form
     currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
     renderCurrentSale();
     document.getElementById('saleInvoice').value = '';
@@ -823,8 +823,21 @@ async function loadStatementClient() {
     currentStatementData.invoices.sort((a,b) => new Date(b.date) - new Date(a.date));
 
     if (currentStatementData.invoices.length === 0) {
-        invSelect.innerHTML = '<option value="">-- No invoices found --</option>';
-        return;
+        // If there are no invoices, but there are payments or returns, show a "General Transactions" option
+        if (currentStatementData.payments.length > 0 || currentStatementData.returns.length > 0) {
+            currentStatementData.invoices.push({
+                id: 'synthetic',
+                invoiceNumber: 'General Transactions',
+                date: new Date().toISOString().split('T')[0],
+                total: 0,
+                amountPaid: 0,
+                lines: [],
+                isLocal: false
+            });
+        } else {
+            invSelect.innerHTML = '<option value="">-- No invoices found --</option>';
+            return;
+        }
     }
 
     invSelect.innerHTML = '<option value="">-- Select Invoice --</option>';
@@ -849,34 +862,45 @@ function renderInvoiceStatement() {
     document.getElementById('stmtInvNo').innerText = inv.invoiceNumber;
     document.getElementById('stmtInvDate').innerText = inv.date;
     
-    const sourceBadge = inv.isLocal 
-        ? '<span class="badge bg-warning text-dark">📱 Local (Unsynced)</span>' 
-        : '<span class="badge bg-success">☁️ Server</span>';
+    const isGeneral = inv.invoiceNumber === 'General Transactions';
+
+    const sourceBadge = isGeneral 
+        ? '<span class="badge bg-secondary">General</span>'
+        : inv.isLocal 
+            ? '<span class="badge bg-warning text-dark">📱 Local (Unsynced)</span>' 
+            : '<span class="badge bg-success">☁️ Server</span>';
     document.getElementById('stmtInvSource').innerHTML = sourceBadge;
 
     const linesTbody = document.getElementById('stmtInvLines');
     linesTbody.innerHTML = '';
-    inv.lines.forEach(l => {
-        linesTbody.innerHTML += `<tr>
-            <td>${l.productName}</td>
-            <td class="text-end">${l.qty}</td>
-            <td class="text-end">${l.price.toFixed(2)}</td>
-            <td class="text-end">${(l.disc || 0)}%</td>
-            <td class="text-end text-primary fw-bold">${(l.netPrice || l.total || 0).toFixed(2)}</td>
-            <td>${inv.isLocal ? '📱' : '☁️'}</td>
-        </tr>`;
-    });
+    
+    if (isGeneral) {
+        linesTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">General Transactions (No specific invoice lines)</td></tr>';
+    } else {
+        inv.lines.forEach(l => {
+            linesTbody.innerHTML += `<tr>
+                <td>${l.productName}</td>
+                <td class="text-end">${l.qty}</td>
+                <td class="text-end">${l.price.toFixed(2)}</td>
+                <td class="text-end">${(l.disc || 0)}%</td>
+                <td class="text-end text-primary fw-bold">${(l.netPrice || l.total || 0).toFixed(2)}</td>
+                <td>${inv.isLocal ? '📱' : '☁️'}</td>
+            </tr>`;
+        });
+    }
 
-    const invPayments = currentStatementData.payments.filter(p => 
-        p.reference && p.reference.includes(inv.invoiceNumber)
-    );
+    // Payments filter
+    const invPayments = isGeneral 
+        ? currentStatementData.payments 
+        : currentStatementData.payments.filter(p => p.reference && p.reference.includes(inv.invoiceNumber));
+        
     const payTbody = document.getElementById('stmtInvPayments');
     payTbody.innerHTML = '';
     
     let totalPaid = inv.amountPaid || 0;
     let hasInitialPayment = totalPaid > 0;
 
-    if (hasInitialPayment) {
+    if (hasInitialPayment && !isGeneral) {
         payTbody.innerHTML += `<tr>
             <td>${inv.date}</td>
             <td>Payment at Invoice</td>
@@ -899,9 +923,11 @@ function renderInvoiceStatement() {
         payTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Payments</td></tr>';
     }
 
-    const invReturns = currentStatementData.returns.filter(r => 
-        r.originalInvoiceNo === inv.invoiceNumber
-    );
+    // Returns filter
+    const invReturns = isGeneral 
+        ? currentStatementData.returns 
+        : currentStatementData.returns.filter(r => r.originalInvoiceNo === inv.invoiceNumber);
+        
     const retTbody = document.getElementById('stmtInvReturns');
     retTbody.innerHTML = '';
     let totalReturns = 0;
@@ -918,9 +944,14 @@ function renderInvoiceStatement() {
         retTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No Returns</td></tr>';
     }
 
-    const balance = inv.total - totalPaid - totalReturns;
-    
-    document.getElementById('stmtInvTotal').innerText = inv.total.toFixed(2);
+    let balance = 0;
+    if (!isGeneral) {
+        balance = inv.total - totalPaid - totalReturns;
+        document.getElementById('stmtInvTotal').innerText = inv.total.toFixed(2);
+    } else {
+        balance = totalReturns - totalPaid; // For general, it's just what they paid minus what they returned
+        document.getElementById('stmtInvTotal').innerText = "0.00";
+    }
     
     const balEl = document.getElementById('stmtInvBalance');
     balEl.innerText = balance.toFixed(2);
