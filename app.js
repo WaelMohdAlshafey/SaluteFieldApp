@@ -1122,6 +1122,7 @@ function exportExcel() {
         const isPay = t.type === 'Payment';
         const month = new Date(t.date).getMonth();
         const quarter = "Q" + Math.ceil((month + 1) / 3);
+        const monthName = new Date(t.date).toLocaleString('default', { month: 'long' });
 
         if (isPay) {
             excelData.push({
@@ -1129,14 +1130,14 @@ function exportExcel() {
                 "code": "MISC", 
                 "movement": 0, 
                 "Date": t.date, 
-                "Transaction": "Payment",
+                "Transaction": "Payments",
                 "product": "Payment on Account", 
-                "quantity": 0, 
+                "quntity": 0, 
                 "Price": 0, 
                 "Discount": "0.00%", 
                 "netPrice": 0,
-                "Arabic_name": t.clientAr, 
-                "InvoiceNo": t.originalInvoiceNo, 
+                "Arabic_Name": t.clientAr, 
+                "Invoice#": t.originalInvoiceNo, 
                 "Client": t.client, 
                 "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
                 "super visor": currentRep.supervisor, 
@@ -1145,37 +1146,40 @@ function exportExcel() {
                 "doc#": t.invoiceNo, 
                 "PaymentMethod": "Cash", 
                 "returns": 0, 
-                "Paid": t.total, 
+                "Collected": t.total, 
                 "requested_amount": 0, 
                 "totalof return": 0, 
                 "returns_price": 0, 
-                "returns_value": 0,
+                "Return": 0, 
                 "price_code": "MISC", 
                 "Sales": 0,
                 "Governorate": t.governorate, 
                 "Region": t.region, 
                 "sales_net": 0, 
                 "Cost_net": 0,
-                "Month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
+                "Month": monthName, 
                 "AgingLimit": 90,
                 "Initiated Date": t.date, 
                 "Quarter": quarter
             });
         } else {
             t.lines.forEach(line => {
+                const unitNetPrice = line.qty > 0 ? (line.netPrice / line.qty) : line.price;
+                const lineTotalCost = line.cost * line.qty;
+
                 excelData.push({
                     "qurter": quarter, 
                     "code": line.productCode || '', 
                     "movement": isSale ? -line.qty : line.qty,
                     "Date": t.date, 
-                    "Transaction": t.type, 
+                    "Transaction": isSale ? "Sales" : "Returns", 
                     "product": line.productName || line.product, 
-                    "quantity": isSale ? line.qty : 0,
+                    "quntity": isSale ? line.qty : 0,
                     "Price": line.price, 
-                    "Discount": isSale ? (line.disc + "%") : "0%",
-                    "netPrice": isSale ? line.netPrice : line.price, 
-                    "Arabic_name": t.clientAr,
-                    "InvoiceNo": t.invoiceNo, 
+                    "Discount": isSale ? (line.disc + "%") : "0.00%",
+                    "netPrice": isSale ? unitNetPrice : line.price, 
+                    "Arabic_Name": t.clientAr,
+                    "Invoice#": t.invoiceNo, 
                     "Client": t.client, 
                     "discription": isSale ? "Mobile App Sale" : "Return against " + t.originalInvoiceNo,
                     "super visor": currentRep.supervisor, 
@@ -1184,18 +1188,18 @@ function exportExcel() {
                     "doc#": t.invoiceNo, 
                     "PaymentMethod": isSale ? t.payType : "Credit", 
                     "returns": isRet ? line.qty : 0,
-                    "Paid": isSale ? t.paid : 0, 
+                    "Collected": isSale ? t.paid : 0, 
                     "requested_amount": isSale ? (line.price * line.qty) : 0,
                     "totalof return": isRet ? line.total : 0, 
                     "returns_price": isRet ? line.price : 0,
-                    "returns_value": isRet ? line.total : 0, 
+                    "Return": isRet ? line.total : 0, 
                     "price_code": line.productCode || '',
-                    "Sales": isSale ? (line.price * line.qty) : 0, 
+                    "Sales": isSale ? line.netPrice : 0, 
                     "Governorate": t.governorate, 
                     "Region": t.region, 
-                    "sales_net": isSale ? line.netPrice : 0, 
-                    "Cost_net": line.cost * line.qty,
-                    "Month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
+                    "sales_net": isSale ? line.netPrice : -line.total, 
+                    "Cost_net": isSale ? lineTotalCost : -lineTotalCost,
+                    "Month": monthName, 
                     "AgingLimit": 90,
                     "Initiated Date": t.date, 
                     "Quarter": quarter
