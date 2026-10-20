@@ -493,11 +493,11 @@ async function loadClientInvoices() {
     
     if (navigator.onLine) {
         try {
-            let url = `${API_BASE}/ClientInvoices?`;
-            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
-            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            let url = new URL(`${API_BASE}/ClientInvoices`);
+            if (clientId && clientId !== 'undefined' && clientId !== '') url.searchParams.append("clientId", clientId);
+            if (clientName) url.searchParams.append("clientName", clientName);
             
-            const resp = await fetch(url);
+            const resp = await fetch(url.toString());
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -678,11 +678,11 @@ async function loadPaymentInvoices() {
     
     if (navigator.onLine) {
         try {
-            let url = `${API_BASE}/ClientInvoices?`;
-            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
-            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            let url = new URL(`${API_BASE}/ClientInvoices`);
+            if (clientId && clientId !== 'undefined' && clientId !== '') url.searchParams.append("clientId", clientId);
+            if (clientName) url.searchParams.append("clientName", clientName);
             
-            const resp = await fetch(url);
+            const resp = await fetch(url.toString());
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -790,11 +790,11 @@ async function loadStatementClient() {
     let serverData = { invoices: [], payments: [], returns: [] };
     if (navigator.onLine) {
         try {
-            let url = `${API_BASE}/ClientStatement?`;
-            if (clientId && clientId !== 'undefined' && clientId !== '') url += `clientId=${clientId}&`;
-            if (clientName) url += `clientName=${encodeURIComponent(clientName)}`;
+            let url = new URL(`${API_BASE}/ClientStatement`);
+            if (clientId && clientId !== 'undefined' && clientId !== '') url.searchParams.append("clientId", clientId);
+            if (clientName) url.searchParams.append("clientName", clientName);
             
-            const resp = await fetch(url);
+            const resp = await fetch(url.toString());
             if (resp.ok) serverData = await resp.json();
         } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
