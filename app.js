@@ -12,7 +12,6 @@ let currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
 let currentRet = { lines: [], total: 0 };
 let currentRep = null;
 let allInvoices = []; 
-let historicalInvoices = []; 
 let currentStatementData = { invoices: [], payments: [], returns: [] };
 
 let currentReportMode = 'sales'; 
@@ -27,7 +26,8 @@ let lastSyncTime = 0;
 let syncIntervalMs = 15 * 60 * 1000;
 let syncIntervalTimer = null;
 
-const VALID_SYNC_INTERVALS = [0, 900000, 1800000, 2700000, 3600000, 86400000];
+const API_BASE = 'https://saluteonline.runasp.net/api/MobileData';
+const VALID_SYNC_INTERVALS = [0, 900000, 1800000, 3600000];
 const DEFAULT_SYNC_INTERVAL_MS = 900000;
 
 // ============================================================
@@ -46,7 +46,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (saved) { try { loadData(JSON.parse(saved)); } catch (e) {} }
     
     savedTx = JSON.parse(localStorage.getItem('salute_saved_v2') || '[]');
-    historicalInvoices = JSON.parse(localStorage.getItem('salute_historical_invoices') || '[]');
     
     lastSyncTime = parseInt(localStorage.getItem('salute_last_sync') || '0');
     updateSyncBadge();
@@ -91,11 +90,6 @@ function changeSyncInterval(value) {
     scheduleSync();
 }
 
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !navigator.onLine || syncIntervalMs <= 0) return;
-    if (!lastSyncTime || Date.now() - lastSyncTime >= syncIntervalMs) syncNow();
-});
-
 async function syncNow() {
     const statusEl = document.getElementById('syncStatus');
     const connEl   = document.getElementById('connectionStatus');
@@ -105,7 +99,7 @@ async function syncNow() {
     statusEl.className = 'badge bg-info';
 
     try {
-        const resp = await fetch('https://saluteonline.runasp.net/api/MobileData', { cache: 'no-store' });
+        const resp = await fetch(API_BASE, { cache: 'no-store' });
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
 
@@ -135,7 +129,7 @@ async function syncNow() {
 async function refreshRepScope() {
     if (!currentRep) return;
     try {
-        const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`, { cache: 'no-store' });
+        const resp = await fetch(`${API_BASE}/RepData?repName=${encodeURIComponent(currentRep.name)}`, { cache: 'no-store' });
         if (resp.ok) {
             const data = await resp.json();
             repScopeClients.clear();
@@ -472,9 +466,9 @@ async function loadClientInvoices() {
     const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
     let serverInvoices = [];
     
-    if (navigator.onLine) {
+    if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientInvoices?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}`);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -492,13 +486,6 @@ async function loadClientInvoices() {
                 })),
                 isLocal: true
             });
-        }
-    });
-
-    const histSales = historicalInvoices.filter(h => h.clientName === clientName);
-    histSales.forEach(hs => {
-        if (!allInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
-            allInvoices.push(hs);
         }
     });
 
@@ -653,9 +640,9 @@ async function loadPaymentInvoices() {
     const clientId = clientSel.options[clientSel.selectedIndex].getAttribute('data-id');
     let serverInvoices = [];
     
-    if (navigator.onLine) {
+    if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientInvoices?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientInvoices?clientId=${clientId}`);
             if (resp.ok) serverInvoices = await resp.json();
         } catch(e) {}
     }
@@ -668,13 +655,6 @@ async function loadPaymentInvoices() {
             allClientInvoices.push({
                 id: 'local_' + ls.invoiceNo, invoiceNumber: ls.invoiceNo, date: ls.date, total: ls.total, isLocal: true
             });
-        }
-    });
-
-    const histSales = historicalInvoices.filter(h => h.clientName === clientName);
-    histSales.forEach(hs => {
-        if (!allClientInvoices.find(si => si.invoiceNumber === hs.invoiceNumber)) {
-            allClientInvoices.push(hs);
         }
     });
 
@@ -770,7 +750,7 @@ async function loadStatementClient() {
     let serverData = { invoices: [], payments: [], returns: [] };
     if (navigator.onLine && clientId) {
         try {
-            const resp = await fetch(`https://saluteonline.runasp.net/api/MobileData/ClientStatement?clientId=${clientId}`);
+            const resp = await fetch(`${API_BASE}/ClientStatement?clientId=${clientId}`);
             if (resp.ok) serverData = await resp.json();
         } catch(e) { console.warn("Failed to fetch server statement", e); }
     }
@@ -781,7 +761,7 @@ async function loadStatementClient() {
         date: s.date,
         total: s.total,
         amountPaid: s.paid || 0,
-        lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.netPrice, total: l.netPrice })),
+        lines: s.lines.map(l => ({ productName: l.product, qty: l.qty, price: l.price, disc: l.disc, netPrice: l.netPrice, total: l.netPrice })),
         isLocal: true
     }));
 
@@ -849,7 +829,8 @@ function renderInvoiceStatement() {
             <td>${l.productName}</td>
             <td class="text-end">${l.qty}</td>
             <td class="text-end">${l.price.toFixed(2)}</td>
-            <td class="text-end">${l.total.toFixed(2)}</td>
+            <td class="text-end">${(l.disc || 0)}%</td>
+            <td class="text-end text-primary fw-bold">${(l.netPrice || l.total || 0).toFixed(2)}</td>
             <td>${inv.isLocal ? '📱' : '☁️'}</td>
         </tr>`;
     });
@@ -969,7 +950,7 @@ async function loadMyReports() {
     }
 
     try {
-        let url = `https://saluteonline.runasp.net/api/MobileData/RepData?repName=${encodeURIComponent(currentRep.name)}`;
+        let url = `${API_BASE}/RepData?repName=${encodeURIComponent(currentRep.name)}`;
         if (fromDate) url += `&from=${fromDate}`;
         if (toDate) url += `&to=${toDate}`;
 
@@ -1133,56 +1114,77 @@ function exportExcel() {
                 "qurter": quarter, 
                 "code": "MISC", 
                 "movement": 0, 
-                "date": t.date, 
-                "transaction": "Payment",
+                "Date": t.date, 
+                "Transaction": "Payment",
                 "product": "Payment on Account", 
                 "quntity": 0, 
-                "price": 0, 
-                "discount": "0%", 
-                "netprice": 0,
-                "arabicname": t.clientAr, 
-                "invoiceno": t.originalInvoiceNo, 
-                "client": t.client, 
+                "Price": 0, 
+                "Discount": "0%", 
+                "netPrice": 0,
+                "Arabic_Name": t.clientAr, 
+                "Invoice#": t.originalInvoiceNo, 
+                "Client": t.client, 
                 "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
                 "super visor": currentRep.supervisor, 
                 "sales rep": currentRep.name, 
                 "cost": 0, 
-                "docno": t.invoiceNo, 
-                "paymentmethod": "Cash", 
+                "doc#": t.invoiceNo, 
+                "PaymentMethod": "Cash", 
                 "returns": 0, 
-                "collected": t.total, 
-                "requestedamount": t.invoiceTotal || 0, 
-                "totalofreturn": 0, 
-                "returnsprice": 0, 
-                "return": 0, 
-                "pricecode": "MISC", 
-                "sales": 0,
-                "governorate": t.governorate, 
-                "region": t.region, 
-                "salesnet": 0, 
-                "costnet": 0,
-                "month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
-                "aginglimit": 30,
-                "initiateddate": t.date, 
-                "quarter": quarter
+                "Collected": t.total, 
+                "requested_amount": t.invoiceTotal || 0, 
+                "totalof return": 0, 
+                "returns_price": 0, 
+                "Return": 0, 
+                "price_code": "MISC", 
+                "Sales": 0,
+                "Governorate": t.governorate, 
+                "Region": t.region, 
+                "sales_net": 0, 
+                "Cost_net": 0,
+                "Month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
+                "AgingLimit": 30,
+                "Initiated Date": t.date, 
+                "Quarter": quarter
             });
         } else {
             t.lines.forEach(line => {
                 excelData.push({
-                    "qurter": quarter, "code": line.productCode || '', "movement": isSale ? -line.qty : line.qty,
-                    "date": t.date, "transaction": t.type, "product": line.productName || line.product, "quntity": isSale ? line.qty : 0,
-                    "price": line.price, "discount": isSale ? (line.disc + "%") : "0%",
-                    "netprice": isSale ? line.netPrice : line.price, "arabicname": t.clientAr,
-                    "invoiceno": t.invoiceNo, "client": t.client, "discription": isSale ? "Mobile App Sale" : "Return against " + t.originalInvoiceNo,
-                    "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": line.cost,
-                    "docno": t.invoiceNo, "paymentmethod": isSale ? t.payType : "Credit", "returns": isRet ? line.qty : 0,
-                    "collected": isSale ? t.paid : 0, "requestedamount": isSale ? (line.price * line.qty) : 0,
-                    "totalofreturn": isRet ? line.total : 0, "returnsprice": isRet ? line.price : 0,
-                    "return": isRet ? line.total : 0, "pricecode": line.productCode || '',
-                    "sales": isSale ? (line.price * line.qty) : 0, "governorate": t.governorate, 
-                    "region": t.region, "salesnet": isSale ? line.netPrice : 0, "costnet": line.cost * line.qty,
-                    "month": new Date(t.date).toLocaleString('default', { month: 'long' }), "aginglimit": 30,
-                    "initiateddate": t.date, "quarter": quarter
+                    "qurter": quarter, 
+                    "code": line.productCode || '', 
+                    "movement": isSale ? -line.qty : line.qty,
+                    "Date": t.date, 
+                    "Transaction": t.type, 
+                    "product": line.productName || line.product, 
+                    "quntity": isSale ? line.qty : 0,
+                    "Price": line.price, 
+                    "Discount": isSale ? (line.disc + "%") : "0%",
+                    "netPrice": isSale ? line.netPrice : line.price, 
+                    "Arabic_Name": t.clientAr,
+                    "Invoice#": t.invoiceNo, 
+                    "Client": t.client, 
+                    "discription": isSale ? "Mobile App Sale" : "Return against " + t.originalInvoiceNo,
+                    "super visor": currentRep.supervisor, 
+                    "sales rep": currentRep.name, 
+                    "cost": line.cost,
+                    "doc#": t.invoiceNo, 
+                    "PaymentMethod": isSale ? t.payType : "Credit", 
+                    "returns": isRet ? line.qty : 0,
+                    "Collected": isSale ? t.paid : 0, 
+                    "requested_amount": isSale ? (line.price * line.qty) : 0,
+                    "totalof return": isRet ? line.total : 0, 
+                    "returns_price": isRet ? line.price : 0,
+                    "Return": isRet ? line.total : 0, 
+                    "price_code": line.productCode || '',
+                    "Sales": isSale ? (line.price * line.qty) : 0, 
+                    "Governorate": t.governorate, 
+                    "Region": t.region, 
+                    "sales_net": isSale ? line.netPrice : 0, 
+                    "Cost_net": line.cost * line.qty,
+                    "Month": new Date(t.date).toLocaleString('default', { month: 'long' }), 
+                    "AgingLimit": 30,
+                    "Initiated Date": t.date, 
+                    "Quarter": quarter
                 });
             });
         }
