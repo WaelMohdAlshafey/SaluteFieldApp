@@ -434,6 +434,7 @@ function saveSaleInvoice() {
 
     const cOpt = clientSel.options[clientSel.selectedIndex];
     const storeAreaCity = getStoreAreaCity(storeSel.value);
+    const paidVal = parseFloat(document.getElementById('salePaid').value) || 0;
     
     savedTx.push({
         type: 'Sale', invoiceNo: inv, date: document.getElementById('saleDate').value,
@@ -441,11 +442,17 @@ function saveSaleInvoice() {
         governorate: cOpt.getAttribute('data-area'), region: cOpt.getAttribute('data-city'),
         storeId: storeSel.value, storeArea: storeAreaCity.area, storeCity: storeAreaCity.city,
         payType: document.getElementById('salePayType').value, 
-        paid: parseFloat(document.getElementById('salePaid').value) || 0,
+        paid: paidVal,
         total: currentSale.total, lines: currentSale.lines.map(l => ({ ...l }))
     });
 
-    clearCurrentSale();
+    // Reset the form directly without confirmation
+    currentSale = { lines: [], gross: 0, discount: 0, total: 0 };
+    renderCurrentSale();
+    document.getElementById('saleInvoice').value = '';
+    document.getElementById('saleClient').value = '';
+    document.getElementById('salePaid').value = 0;
+
     saveAndRender();
 }
 
@@ -1139,7 +1146,7 @@ function exportExcel() {
                 "Arabic_name": t.clientAr, "InvoiceNo": t.originalInvoiceNo, "Client": t.client, 
                 "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
                 "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": 0, "doc#": t.invoiceNo, 
-                "PaymentMethod": "Cash", "returns": 0, "Paid": t.total, "requested_amount": 0, "totalof return": 0, 
+                "PaymentMethod": t.payType || "Cash", "returns": 0, "Paid": t.total, "requested_amount": 0, "totalof return": 0, 
                 "returns_price": 0, "returns_value": 0, "price_code": "MISC", "Sales": 0,
                 "Governorate": t.governorate, "Region": t.region, "sales_net": 0, "Cost_net": 0,
                 "Month": monthName, "AgingLimit": 90
@@ -1179,18 +1186,42 @@ function exportExcel() {
             });
 
             // If it's a Sale and has a paid amount, add a SEPARATE Payment line
-            if (isSale && t.paid > 0) {
+            const tPaid = parseFloat(t.paid) || 0;
+            if (isSale && tPaid > 0) {
                 excelData.push({
-                    "qurter": quarter, "code": t.invoiceNo, "movement": 0, "Date": t.date, "Transaction": "Payments",
-                    "product": "Payment on Account", "quantity": 0, "Price": 0, "Discount": "0.00%", "netPrice": 0,
-                    "Arabic_name": t.clientAr, "InvoiceNo": t.invoiceNo, "Client": t.client, 
+                    "qurter": quarter, 
+                    "code": t.invoiceNo, 
+                    "movement": 0, 
+                    "Date": t.date, 
+                    "Transaction": "Payments",
+                    "product": "Payment on Account", 
+                    "quantity": 0, 
+                    "Price": 0, 
+                    "Discount": "0.00%", 
+                    "netPrice": 0,
+                    "Arabic_name": t.clientAr, 
+                    "InvoiceNo": t.invoiceNo, 
+                    "Client": t.client, 
                     "discription": `Payment at Invoice ${t.invoiceNo}`,
-                    "super visor": currentRep.supervisor, "sales rep": currentRep.name, "cost": 0, 
-                    "doc#": t.invoiceNo, "PaymentMethod": t.payType, "returns": 0, "Paid": t.paid, 
-                    "requested_amount": 0, "totalof return": 0, "returns_price": 0, "returns_value": 0, 
-                    "price_code": "MISC", "Sales": 0,
-                    "Governorate": t.governorate, "Region": t.region, "sales_net": 0, "Cost_net": 0,
-                    "Month": monthName, "AgingLimit": 90
+                    "super visor": currentRep.supervisor, 
+                    "sales rep": currentRep.name, 
+                    "cost": 0, 
+                    "doc#": t.invoiceNo, 
+                    "PaymentMethod": t.payType || "Cash", 
+                    "returns": 0, 
+                    "Paid": tPaid, 
+                    "requested_amount": 0, 
+                    "totalof return": 0, 
+                    "returns_price": 0, 
+                    "returns_value": 0, 
+                    "price_code": "MISC", 
+                    "Sales": 0,
+                    "Governorate": t.governorate, 
+                    "Region": t.region, 
+                    "sales_net": 0, 
+                    "Cost_net": 0,
+                    "Month": monthName, 
+                    "AgingLimit": 90
                 });
             }
         }
