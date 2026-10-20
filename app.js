@@ -481,7 +481,7 @@ async function loadClientInvoices() {
             allInvoices.push({
                 id: 'local_' + ls.invoiceNo, invoiceNumber: ls.invoiceNo, date: ls.date, total: ls.total,
                 lines: ls.lines.map(l => ({ 
-                    productName: l.product, productId: 0, qty: l.qty, 
+                    productName: l.product, productId: 0, productCode: l.productCode, qty: l.qty, 
                     price: l.price, netPrice: l.netPrice, disc: l.disc, cost: l.cost 
                 })),
                 isLocal: true
@@ -556,8 +556,15 @@ function updateRetLineTotal() {
         const actualNetPrice = line.netPrice !== undefined && line.netPrice > 0 ? line.netPrice : line.price;
         const lineTotal = Math.round(qty * actualNetPrice * 100) / 100;
         
+        // Fallback to look up product code if not in the line object
+        let pCode = line.productCode;
+        if (!pCode) {
+            const pObj = allProducts.find(p => p.name === line.productName);
+            if (pObj) pCode = pObj.code;
+        }
+
         currentRet.lines.push({
-            productName: line.productName, productId: line.productId,
+            productName: line.productName, productId: line.productId, productCode: pCode,
             cost: line.cost, qty: qty, price: actualNetPrice, total: lineTotal
         });
         currentRet.total = Math.round((currentRet.total + lineTotal) * 100) / 100;
@@ -1163,16 +1170,19 @@ function exportExcel() {
         } else {
             t.lines.forEach(line => {
                 const prodName = line.productName || line.product || 'Unknown';
-                const prodCode = line.productCode || 'MISC';
-                const invRef = isRet ? t.originalInvoiceNo : t.invoiceNo;
-                const priceCode = prodName + invRef;
+                const prodCode = line.productCode || '';
+                const invRef = isRet ? t.invoiceNo : t.invoiceNo; // t.invoiceNo is RET-xxx for returns
+
+                // Force non-blank columns B and Z
+                const finalCode = prodCode ? prodCode : invRef;
+                const finalPriceCode = isRet ? invRef : (prodName + invRef);
 
                 const unitNetPrice = line.qty > 0 ? (line.netPrice / line.qty) : line.price;
                 const lineTotalCost = line.cost * line.qty;
 
                 excelData.push({
                     "qurter": quarter, 
-                    "code": prodCode, 
+                    "code": finalCode, 
                     "movement": isSale ? -line.qty : line.qty,
                     "Date": t.date, 
                     "Transaction": isSale ? "Sales" : "Returns", 
@@ -1196,7 +1206,7 @@ function exportExcel() {
                     "totalof return": isRet ? line.total : 0, 
                     "returns_price": isRet ? line.price : 0,
                     "returns_value": isRet ? line.total : 0, 
-                    "price_code": priceCode, 
+                    "price_code": finalPriceCode, 
                     "Sales": isSale ? line.netPrice : 0, 
                     "Governorate": t.governorate, 
                     "Region": t.region, 
