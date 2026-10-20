@@ -958,14 +958,26 @@ async function loadMyReports() {
         if (!response.ok) throw new Error("Failed to fetch");
 
         const data = await response.json();
-        rawServerSales = data.sales || [];
+        
+        // --- MERGE SERVER AND LOCAL DATA ---
+        const localSales = savedTx.filter(t => t.type === 'Sale').map(s => ({
+            date: s.date, invoiceNo: s.invoiceNo, client: s.client, total: s.total, paid: s.paid || 0, returns: 0, isLocal: true
+        }));
+        const localPayments = savedTx.filter(t => t.type === 'Payment').map(p => ({
+            date: p.date, client: p.client, amount: p.total, isLocal: true
+        }));
+        const localReturns = savedTx.filter(t => t.type === 'Return').map(r => ({
+            date: r.date, client: r.client, amount: r.total, isLocal: true
+        }));
+
+        rawServerSales = [...(data.sales || []), ...localSales];
         rawServerBalances = data.balances || [];
-        rawServerPayments = data.payments || [];
-        rawServerReturns = data.returns || [];
+        rawServerPayments = [...(data.payments || []), ...localPayments];
+        rawServerReturns = [...(data.returns || []), ...localReturns];
         rawServerOpening = data.openingBalances || {};
 
         if (rawServerSales.length === 0 && rawServerBalances.length === 0 && rawServerPayments.length === 0 && rawServerReturns.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data found on server for this period.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data found on server or locally for this period.</td></tr>';
             return;
         }
 
@@ -986,9 +998,11 @@ function renderReportTable() {
         rawServerSales.forEach(s => {
             const balColor = (s.total - s.paid) > 0.01 ? 'text-danger fw-bold' : 'text-success';
             totalSales += (s.total || 0);
+            const icon = s.isLocal ? '📱' : '☁️';
+            
             tbody.innerHTML += `<tr>
                 <td>${s.date}</td>
-                <td><strong>☁️ ${s.invoiceNo}</strong></td>
+                <td><strong>${icon} ${s.invoiceNo}</strong></td>
                 <td>${s.client}</td>
                 <td class="text-end text-dark">${(s.total || 0).toFixed(2)}</td>
                 <td class="text-end text-success">${(s.paid || 0).toFixed(2)}</td>
