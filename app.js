@@ -1132,12 +1132,12 @@ function exportExcel() {
                 "Date": t.date, 
                 "Transaction": "Payments",
                 "product": "Payment on Account", 
-                "quntity": 0, 
+                "quantity": 0, 
                 "Price": 0, 
                 "Discount": "0.00%", 
                 "netPrice": 0,
-                "Arabic_Name": t.clientAr, 
-                "Invoice#": t.originalInvoiceNo, 
+                "Arabic_name": t.clientAr, 
+                "InvoiceNo": t.originalInvoiceNo, 
                 "Client": t.client, 
                 "discription": `Payment against Invoice ${t.originalInvoiceNo}`,
                 "super visor": currentRep.supervisor, 
@@ -1146,11 +1146,11 @@ function exportExcel() {
                 "doc#": t.invoiceNo, 
                 "PaymentMethod": "Cash", 
                 "returns": 0, 
-                "Collected": t.total, 
+                "Paid": t.total, 
                 "requested_amount": 0, 
                 "totalof return": 0, 
                 "returns_price": 0, 
-                "Return": 0, 
+                "returns_value": 0,
                 "price_code": "MISC", 
                 "Sales": 0,
                 "Governorate": t.governorate, 
@@ -1158,9 +1158,7 @@ function exportExcel() {
                 "sales_net": 0, 
                 "Cost_net": 0,
                 "Month": monthName, 
-                "AgingLimit": 90,
-                "Initiated Date": t.date, 
-                "Quarter": quarter
+                "AgingLimit": 90
             });
         } else {
             t.lines.forEach(line => {
@@ -1174,12 +1172,12 @@ function exportExcel() {
                     "Date": t.date, 
                     "Transaction": isSale ? "Sales" : "Returns", 
                     "product": line.productName || line.product, 
-                    "quntity": isSale ? line.qty : 0,
+                    "quantity": isSale ? line.qty : 0,
                     "Price": line.price, 
                     "Discount": isSale ? (line.disc + "%") : "0.00%",
                     "netPrice": isSale ? unitNetPrice : line.price, 
-                    "Arabic_Name": t.clientAr,
-                    "Invoice#": t.invoiceNo, 
+                    "Arabic_name": t.clientAr,
+                    "InvoiceNo": t.invoiceNo, 
                     "Client": t.client, 
                     "discription": isSale ? "Mobile App Sale" : "Return against " + t.originalInvoiceNo,
                     "super visor": currentRep.supervisor, 
@@ -1188,11 +1186,11 @@ function exportExcel() {
                     "doc#": t.invoiceNo, 
                     "PaymentMethod": isSale ? t.payType : "Credit", 
                     "returns": isRet ? line.qty : 0,
-                    "Collected": isSale ? t.paid : 0, 
+                    "Paid": isSale ? t.paid : 0, 
                     "requested_amount": isSale ? (line.price * line.qty) : 0,
                     "totalof return": isRet ? line.total : 0, 
                     "returns_price": isRet ? line.price : 0,
-                    "Return": isRet ? line.total : 0, 
+                    "returns_value": isRet ? line.total : 0, 
                     "price_code": line.productCode || '',
                     "Sales": isSale ? line.netPrice : 0, 
                     "Governorate": t.governorate, 
@@ -1200,9 +1198,7 @@ function exportExcel() {
                     "sales_net": isSale ? line.netPrice : -line.total, 
                     "Cost_net": isSale ? lineTotalCost : -lineTotalCost,
                     "Month": monthName, 
-                    "AgingLimit": 90,
-                    "Initiated Date": t.date, 
-                    "Quarter": quarter
+                    "AgingLimit": 90
                 });
             });
         }
